@@ -1144,6 +1144,10 @@ body::after {
   .hud .group:last-child .brand { display: none; }
   /* On very small screens, hide a couple of secondary HUD bits */
   .hud.top .group:first-child > span:not(.brand) { display: none; }
+  /* keep the decorative bottom bar to one slim line so it can't cover the crates */
+  .hud.bottom { padding: 8px 12px; font-size: 9px; }
+  .hud.bottom .group { gap: 10px; }
+  .hud.bottom span { white-space: nowrap; }
 
   .scene {
     width: 100vw;
@@ -1190,9 +1194,9 @@ body::after {
   }
   .base { width: 70px; left: -35px; }
 
-  /* Crates: 3 columns x 2 rows, tighter, lifted off the bottom */
+  /* Crates: 3 columns x 2 rows, tighter, lifted clear of the bottom HUD bar */
   .crates {
-    bottom: 50px;
+    bottom: 68px;
     gap: 10px;
     padding: 0 12px;
   }
@@ -1349,7 +1353,7 @@ const CONFIG = {
   // ---------- HEADER / HERO ----------   // shown top-left in HUD
   eyebrow: "B.Tech (AI & Robotics) · MBA (Information Systems)",      // tagline above your name
   name: "Vireen Chowdary",                  // your name (will appear in accent color)
-  bio: "Business analyst with a background in AI and robotics. I like working where engineering, operations, and leadership meet. I love working and translating between teams, building the decision-support layer, and making sure the right decisions get made for the right reasons.",
+  bio: "I build things that turn hard problems into clear decisions — a model, a dashboard, a whole product, whatever the problem actually needs. With a B.Tech in AI & Robotics and an MBA in Information Systems & Analytics, I'm at home in both the technical room and the strategy room, and I'll happily learn whatever the work asks for to get it right.",
 
   // ---------- SECTIONS ----------
   // To add a new section (e.g. "Writings"):
@@ -1498,7 +1502,6 @@ const CONFIG = {
                 description: "Predicts the country in a photo by fusing three independent signals — visual scene, on-image text/script, and national flags — and shows which evidence drove the call. A clean 2026 rebuild of my 2022 B.Tech group project.",
                 heroImage: "assets/geospot/demo_static.png",
                 links: [
-                  // TODO Vireen: confirm the repo URL if the slug differs.
                   { label: "GitHub", url: "https://github.com/Vireen555/geospot", primary: true }
                 ],
                 body: [
@@ -2052,6 +2055,37 @@ document.addEventListener('keydown', (e) => {
   if (lightbox.classList.contains('open')) { closeLightbox(); return; }
   if (overlay.classList.contains('open')) closePanel();
 });
+
+// ---- Swipe-to-go-back (mobile) ----
+// A deliberate horizontal swipe (either direction) steps back one level:
+// project case study → project chooser → close the section.
+function goBack() {
+  if (lightbox.classList.contains('open')) { closeLightbox(); return; }
+  if (!overlay.classList.contains('open')) return;
+  if (document.querySelector('.panel-inner .back-btn')) backToProjects();
+  else closePanel();
+}
+
+(function enableSwipeBack() {
+  const panelEl = overlay.querySelector('.panel');
+  if (!panelEl) return;
+  let sx = 0, sy = 0, tracking = false;
+  panelEl.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) { tracking = false; return; }
+    sx = e.touches[0].clientX;
+    sy = e.touches[0].clientY;
+    tracking = true;
+  }, { passive: true });
+  panelEl.addEventListener('touchend', (e) => {
+    if (!tracking) return;
+    tracking = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - sx;
+    const dy = t.clientY - sy;
+    // mostly-horizontal and far enough to be intentional
+    if (Math.abs(dx) > 75 && Math.abs(dx) > Math.abs(dy) * 1.8) goBack();
+  }, { passive: true });
+})();
 
 function renderSection(s) {
   const c = s.content;
