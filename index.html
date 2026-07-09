@@ -1,0 +1,2435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Portfolio — Robotics & AI</title>
+
+<!-- ============================================================
+     FONTS  (swap freely)
+============================================================ -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   DESIGN TOKENS  — change colors / sizes here once, applies everywhere
+============================================================ */
+:root {
+  /* ── DARK THEME ── */
+  --bg:            #0a0d12;    /* near-black warehouse floor */
+  --bg-grid:       rgba(255, 255, 255, 0.06);   /* thin white grid lines */
+  --bg-grid-major: rgba(255, 255, 255, 0.11);   /* every 5th line, slightly brighter */
+  --panel:         #14181f;    /* card / overlay surface */
+  --panel-elev:    #1a1f28;    /* hover surface */
+  --ink:           #e8ecf1;    /* primary text */
+  --ink-soft:      #a8b0bd;
+  --ink-faint:     #6b7280;
+  --line:          rgba(255, 255, 255, 0.08);
+  --line-strong:   rgba(255, 255, 255, 0.16);
+  --accent:        #4d9bff;    /* electric blue (slightly softened for dark bg) */
+  --accent-soft:   rgba(77, 155, 255, 0.12);
+  --signal:        #00d18f;    /* status green */
+  --warn:          #ffb020;
+  --steel:         #c0c8d2;    /* arm body (kept light — looks like a real arm against dark) */
+  --steel-dark:    #8b95a3;
+  --steel-deep:    #4a5260;
+  --shadow:        0 20px 50px -15px rgba(0, 0, 0, 0.6);
+
+  --font-display:  'Sora', system-ui, sans-serif;
+  --font-mono:     'JetBrains Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: var(--font-display);
+  color: var(--ink);
+  background: var(--bg);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* graph-paper grid: minor lines every 40px, major lines every 200px */
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(var(--bg-grid-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bg-grid-major) 1px, transparent 1px);
+  background-size: 40px 40px, 40px 40px, 200px 200px, 200px 200px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* faint radial vignette to focus the eye on the arm */
+body::after {
+  content: "";
+  position: fixed; inset: 0;
+  background: radial-gradient(ellipse at 50% 45%, transparent 30%, rgba(10,13,18,0.7) 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ============================================================
+   HUD — top + bottom status bars (decorative)
+============================================================ */
+.hud {
+  position: fixed;
+  left: 0; right: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  pointer-events: none;
+}
+.hud.top    { top: 0;    border-bottom: 1px solid var(--line); background: rgba(10,13,18,0.75); backdrop-filter: blur(10px); }
+.hud.bottom { bottom: 0; border-top:    1px solid var(--line); background: rgba(10,13,18,0.75); backdrop-filter: blur(10px); }
+.hud .group { display: flex; gap: 22px; align-items: center; }
+.hud .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 0 3px rgba(0,209,143,0.22), 0 0 12px rgba(0,209,143,0.4);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(0,209,143,0.22), 0 0 12px rgba(0,209,143,0.4); }
+  50%      { box-shadow: 0 0 0 6px rgba(0,209,143,0.05), 0 0 8px  rgba(0,209,143,0.2); }
+}
+.hud .brand { color: var(--ink); font-weight: 700; letter-spacing: 0.12em; }
+
+/* ============================================================
+   STAGE  (the warehouse scene)
+============================================================ */
+.stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.scene {
+  position: relative;
+  width: min(1100px, 95vw);
+  height: min(680px, 80vh);
+  margin-top: 20px;
+}
+
+/* HERO — name + tagline tucked top-left of scene */
+.hero {
+  position: absolute;
+  top: -4px; left: 0;
+  max-width: 520px;
+  z-index: 4;
+}
+.hero .eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0em;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin-bottom: 35px;
+  display: flex; align-items: center; gap: 10px;
+}
+.hero .eyebrow::before {
+  content: ""; width: 28px; height: 1px; background: var(--accent);
+}
+.hero h1 {
+  font-size: clamp(36px, 5vw, 56px);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin-bottom: 14px;
+}
+.hero h1 .accent { color: var(--accent); }
+.hero p {
+  font-size: 15px;
+  color: var(--ink-soft);
+  line-height: 1.6;
+  max-width: 440px;
+}
+.hero .instr {
+  margin-top: 18px;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.hero .instr svg { width: 14px; height: 14px; }
+
+/* ============================================================
+   ROBOTIC ARM
+   Built with nested transforms — each "joint" is a div that
+   rotates its children. Inverse-kinematics-ish hand animation
+   is done with CSS keyframes triggered by JS.
+============================================================ */
+.arm-mount {
+  position: absolute;
+  /* base sits at this point in the scene */
+  left: 50%;
+  top: 8%;
+  width: 0; height: 0;
+  z-index: 3;
+  transform: translateX(-50%);
+}
+
+/* ceiling rail the arm is mounted to */
+.rail {
+  position: absolute;
+  top: 4%;
+  left: 8%;
+  right: 8%;
+  height: 14px;
+  background: linear-gradient(180deg, #d8dee6 0%, #aab3bf 50%, #6e7785 100%);
+  border-radius: 3px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+  z-index: 2;
+}
+.rail::before, .rail::after {
+  content: "";
+  position: absolute;
+  top: -8px;
+  width: 18px; height: 26px;
+  background: var(--steel-deep);
+  border-radius: 2px;
+}
+.rail::before { left: -4px; }
+.rail::after  { right: -4px; }
+
+/* base plate (where arm meets ceiling) */
+.base {
+  position: absolute;
+  top: -2px;
+  left: -45px;
+  width: 90px; height: 28px;
+  background: linear-gradient(180deg, var(--steel) 0%, var(--steel-dark) 100%);
+  border-radius: 4px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
+.base::after {
+  content: "";
+  position: absolute;
+  left: 50%; bottom: -6px;
+  transform: translateX(-50%);
+  width: 36px; height: 12px;
+  background: var(--steel-deep);
+  border-radius: 0 0 6px 6px;
+}
+
+/* SEGMENT 1 — shoulder rotor + upper arm */
+.shoulder {
+  position: absolute;
+  left: 0; top: 18px;
+  transform-origin: 0% 0%;
+  transition: transform 1.1s cubic-bezier(.6,.05,.25,1);
+  /* default rest position */
+  transform: rotate(8deg);
+}
+
+/* When the arm is tracking the cursor, JS handles the smoothing
+   so the CSS transition gets out of the way (it was causing 7-8s lag) */
+.arm.tracking .shoulder,
+.arm.tracking .elbow,
+.arm.tracking .wrist {
+  transition: none;
+}
+.upper-arm {
+  position: absolute;
+  left: -18px;          /* shift so rotor sits at joint */
+  top: 0;
+  width: 36px;
+  height: 170px;
+  background: linear-gradient(90deg, #d6dde5 0%, #b4bdc9 50%, #8c95a3 100%);
+  border-radius: 6px;
+  box-shadow: inset -3px 0 0 rgba(0,0,0,0.08);
+}
+.upper-arm::before { /* rotor at top */
+  content: "";
+  position: absolute;
+  top: -14px; left: 50%;
+  transform: translateX(-50%);
+  width: 50px; height: 50px;
+  background: radial-gradient(circle at 35% 35%, #e7ecf2, #8b95a3 70%);
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4), inset 0 0 0 4px #0a0d12;
+}
+.upper-arm::after { /* center bolt detail */
+  content: "";
+  position: absolute;
+  top: 4px; left: 50%;
+  transform: translateX(-50%);
+  width: 14px; height: 14px;
+  background: var(--steel-deep);
+  border-radius: 50%;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.4);
+}
+
+/* SEGMENT 2 — elbow + forearm */
+.elbow {
+  position: absolute;
+  left: 50%;
+  top: 170px;            /* end of upper arm */
+  transform-origin: 0% 0%;
+  transition: transform 1.1s cubic-bezier(.6,.05,.25,1);
+  transform: translateX(-50%) rotate(-20deg);
+}
+.forearm {
+  position: absolute;
+  left: -16px;
+  top: 0;
+  width: 32px;
+  height: 150px;
+  background: linear-gradient(90deg, #d6dde5 0%, #b4bdc9 50%, #8c95a3 100%);
+  border-radius: 5px;
+}
+.forearm::before { /* rotor at top */
+  content: "";
+  position: absolute;
+  top: -12px; left: 50%;
+  transform: translateX(-50%);
+  width: 42px; height: 42px;
+  background: radial-gradient(circle at 35% 35%, #e7ecf2, #8b95a3 70%);
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4), inset 0 0 0 3px #0a0d12;
+}
+.forearm::after { /* bolt */
+  content: "";
+  position: absolute;
+  top: 3px; left: 50%;
+  transform: translateX(-50%);
+  width: 12px; height: 12px;
+  background: var(--steel-deep);
+  border-radius: 50%;
+}
+
+/* SEGMENT 3 — wrist + gripper */
+.wrist {
+  position: absolute;
+  left: 50%;
+  top: 150px;
+  transform-origin: 0% 0%;
+  transition: transform 1.1s cubic-bezier(.6,.05,.25,1);
+  transform: translateX(-50%) rotate(0deg);
+}
+.gripper-housing {
+  position: absolute;
+  left: -22px;
+  top: 0;
+  width: 44px;
+  height: 36px;
+  background: linear-gradient(180deg, var(--steel) 0%, var(--steel-dark) 100%);
+  border-radius: 4px 4px 2px 2px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.18);
+}
+.gripper-housing::before {
+  content: "";
+  position: absolute;
+  top: 6px; left: 50%;
+  transform: translateX(-50%);
+  width: 8px; height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--accent);
+}
+
+/* gripper claws */
+.claw {
+  position: absolute;
+  top: 32px;
+  width: 8px;
+  height: 28px;
+  background: linear-gradient(180deg, var(--steel-dark), var(--steel-deep));
+  border-radius: 2px;
+  transition: transform 0.4s cubic-bezier(.6,.05,.25,1);
+}
+.claw.left  { left: -16px;  transform-origin: top right; transform: rotate(-12deg); }
+.claw.right { right: -16px; transform-origin: top left;  transform: rotate(12deg); }
+
+/* gripping state — claws close */
+.arm.gripping .claw.left  { transform: rotate(2deg);  }
+.arm.gripping .claw.right { transform: rotate(-2deg); }
+
+/* held box rides with the wrist — matches dark crate */
+/* held box rides with the wrist */
+.held-box {
+  position: absolute;
+  top: 52px;
+  left: -32px;
+  width: 64px; height: 64px;
+  background: linear-gradient(135deg, #e6c285, #c89856);
+  border: 2px solid #8a6a3a;
+  border-radius: 3px;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.2s, transform 0.3s;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+.held-box::before {
+  content: "";
+  position: absolute;
+  top: 30%; left: 0; right: 0;
+  height: 2px;
+  background: #8a6a3a;
+}
+.arm.holding .held-box { opacity: 1; transform: scale(1); }
+
+/* cable / hose detail running along arm (purely decorative) */
+.cable {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  width: 4px;
+  height: 100%;
+  background: repeating-linear-gradient(
+    180deg,
+    #2a3340 0 6px,
+    #1a2230 6px 12px
+  );
+  border-radius: 2px;
+  transform: translateX(-50%);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ============================================================
+   CRATES  (the buttons)
+============================================================ */
+.crates {
+  position: absolute;
+  bottom: 4%;
+  left: 0; right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  z-index: 2;
+  flex-wrap: wrap;
+  padding: 0 20px;
+}
+
+.crate {
+  position: relative;
+  width: 130px;
+  height: 130px;
+  background: linear-gradient(145deg, #f0d29a 0%, #d5a868 50%, #b88547 100%);
+  border: 2px solid #8a6a3a;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 10px;
+  transition: transform 0.3s cubic-bezier(.6,.05,.25,1), box-shadow 0.3s, opacity 0.4s;
+  box-shadow:
+    0 4px 12px rgba(0,0,0,0.4),
+    inset 0 0 0 1px rgba(255,255,255,0.2);
+  font-family: var(--font-display);
+  user-select: none;
+}
+
+/* wood/box panel lines */
+.crate::before {
+  content: "";
+  position: absolute;
+  top: 30%; left: -2px; right: -2px;
+  height: 4px;
+  background: linear-gradient(180deg, #8a6a3a, #6a4f28);
+}
+.crate::after {
+  content: "";
+  position: absolute;
+  bottom: 30%; left: -2px; right: -2px;
+  height: 4px;
+  background: linear-gradient(180deg, #8a6a3a, #6a4f28);
+}
+
+.crate .icon {
+  position: absolute;
+  top: 14px; left: 50%;
+  transform: translateX(-50%);
+  width: 28px; height: 28px;
+  color: #5a3f1a;
+  opacity: 0.85;
+}
+.crate .label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #3d2a10;
+  background: rgba(255,255,255,0.55);
+  padding: 4px 8px;
+  border-radius: 2px;
+  border: 1px solid rgba(58,42,16,0.3);
+}
+.crate .id {
+  position: absolute;
+  top: 6px; right: 6px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: #5a3f1a;
+  opacity: 0.7;
+  letter-spacing: 0.1em;
+}
+
+.crate:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.3);
+}
+/* crate being picked up — fades because the "held-box" overlay represents it */
+.crate.picked {
+  opacity: 0;
+  transform: translateY(-30px);
+  pointer-events: none;
+}
+
+/* ============================================================
+   PANEL  (opens after pick animation)
+============================================================ */
+.panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s;
+  padding: 0;
+}
+.panel-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.panel {
+  background: var(--panel);
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 0;
+  border: none;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transform: scale(0.98);
+  transition: transform 0.5s cubic-bezier(.2,.8,.2,1);
+}
+.panel-overlay.open .panel {
+  transform: scale(1) translateY(0);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 28px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--panel-elev), var(--panel));
+}
+.panel-header-left { display: flex; align-items: center; gap: 18px; min-width: 0; }
+.panel-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.panel-back svg { width: 16px; height: 16px; }
+.panel-back:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); transform: translateX(-2px); }
+.panel-header .crumbs {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+.panel-header .crumbs .sep { color: var(--line); margin: 0 8px; }
+.panel-header .crumbs .active { color: var(--accent); }
+.panel-close {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  color: var(--ink-soft);
+  transition: all 0.2s;
+}
+.panel-close:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+.panel-body {
+  padding: 40px 36px 64px;
+  overflow-y: auto;
+  flex: 1;
+}
+/* keep content readable even though the panel is now full-bleed */
+.panel-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+/* ---- About: portrait floats top-right, text wraps around it ---- */
+.about-body::after { content: ""; display: block; clear: both; }
+.about-photo {
+  float: right;
+  width: 260px;
+  max-width: 42%;
+  margin: 4px 0 20px 30px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--panel-elev);
+  box-shadow: var(--shadow);
+}
+.about-photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3/4;
+  object-fit: cover;
+}
+.about-photo figcaption {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  text-align: center;
+  padding: 10px 8px;
+  border-top: 1px solid var(--line);
+}
+.panel-body h2 {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 6px;
+}
+.panel-body .subtitle {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin-bottom: 24px;
+}
+.panel-body p { color: var(--ink-soft); line-height: 1.7; margin-bottom: 14px; font-size: 15px; }
+.panel-body a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-soft); }
+.panel-body a:hover { border-bottom-color: var(--accent); }
+
+/* project cards */
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 18px;
+  margin-top: 8px;
+}
+.project-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  background: var(--panel-elev);
+  transition: all 0.2s;
+}
+.project-card:hover { border-color: var(--accent); background: #1f2632; transform: translateY(-2px); }
+.project-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.project-card .tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 3px 8px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.project-card p { font-size: 13.5px; margin-bottom: 12px; }
+.project-card .links { display: flex; gap: 12px; font-size: 12px; font-family: var(--font-mono); }
+.project-card .links a { letter-spacing: 0.06em; text-transform: uppercase; }
+.project-card video, .project-card iframe {
+  width: 100%;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  aspect-ratio: 16/9;
+}
+
+/* ---- project groups (Portfolio / Academic / Data / AI-ML) ---- */
+.project-group { margin-bottom: 44px; }
+.project-group .group-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.project-group .group-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+.project-group .group-count {
+  color: var(--ink-faint);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+}
+
+/* ---- featured / case-study project ---- */
+.case-study {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-elev);
+  padding: 28px 30px 30px;
+  margin-bottom: 24px;
+}
+.case-study .cs-head { margin-bottom: 18px; }
+.case-study .tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 3px 8px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.case-study h3 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 4px; }
+.case-study .cs-sub { color: var(--ink-soft); font-size: 15px; line-height: 1.6; }
+.case-study .cs-body p { font-size: 14.5px; line-height: 1.75; color: var(--ink-soft); margin-bottom: 12px; }
+.case-study .cs-highlights {
+  list-style: none;
+  margin: 6px 0 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px 22px;
+}
+.case-study .cs-highlights li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+.case-study .cs-highlights li::before {
+  content: "▸";
+  position: absolute; left: 0; top: 0;
+  color: var(--accent);
+}
+.case-study .cs-links { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0 4px; }
+
+/* ---- image gallery ---- */
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+.gallery .shot {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0d1117;
+}
+.gallery .shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: zoom-in;
+  transition: transform 0.3s;
+}
+.gallery .shot:hover img { transform: scale(1.02); }
+.gallery .shot figcaption {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  line-height: 1.4;
+}
+
+/* ---- lightbox for enlarging shots ---- */
+.lightbox {
+  position: fixed; inset: 0;
+  background: rgba(3,5,8,0.92);
+  z-index: 30;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  cursor: zoom-out;
+}
+.lightbox.open { display: flex; }
+.lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 6px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+}
+
+/* ---- project chooser (tiles) ---- */
+.chooser-hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  margin: -12px 0 26px;
+}
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 18px;
+}
+.project-tile {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-elev);
+  color: var(--ink);
+  cursor: pointer;
+  overflow: hidden;
+  font-family: var(--font-display);
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+.project-tile:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+  box-shadow: 0 14px 30px rgba(0,0,0,0.45);
+}
+.tile-thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16/9;
+  overflow: hidden;
+  background: #0d1117;
+  border-bottom: 1px solid var(--line);
+}
+.tile-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tile-body { display: block; padding: 16px 18px 18px; }
+.tile-body .tag { margin-bottom: 10px; }
+.tile-title { display: block; font-size: 17px; font-weight: 600; line-height: 1.25; margin-bottom: 6px; }
+.tile-desc {
+  display: -webkit-box;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  margin-bottom: 12px;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tile-cta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* ---- back button (detail view) ---- */
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 20px;
+  transition: all 0.2s;
+}
+.back-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+/* ---- case-study hero (video / gif) ---- */
+.cs-hero {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  margin-bottom: 8px;
+  background: #0d1117;
+}
+.cs-hero img { display: block; width: 100%; height: auto; cursor: zoom-in; }
+.cs-hero-video { position: relative; aspect-ratio: 16/9; }
+.cs-hero-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+/* clickable poster fallback (used on local file:// previews) */
+.cs-hero-poster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-size: cover;
+  background-position: center;
+  text-decoration: none;
+}
+.cs-hero-poster::before {
+  content: "";
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.35);
+  transition: background 0.2s;
+}
+.cs-hero-poster:hover::before { background: rgba(0,0,0,0.2); }
+.cs-play {
+  position: relative;
+  z-index: 1;
+  width: 76px; height: 76px;
+  display: flex; align-items: center; justify-content: center;
+  padding-left: 5px;
+  background: rgba(255,0,0,0.88);
+  color: #fff;
+  font-size: 30px;
+  border-radius: 50%;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  transition: transform 0.2s, background 0.2s;
+}
+.cs-hero-poster:hover .cs-play { transform: scale(1.08); background: #ff0000; }
+.cs-hero-hint {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+  margin: 0 0 20px 2px;
+}
+
+/* ---- case-study body blocks ---- */
+.cs-lead {
+  font-size: 17px !important;
+  line-height: 1.6 !important;
+  color: var(--ink) !important;
+  margin-bottom: 18px !important;
+}
+.cs-body .cs-h {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 28px 0 12px;
+}
+.cs-note {
+  border-left: 3px solid var(--warn);
+  background: rgba(255,176,32,0.08);
+  padding: 12px 16px;
+  border-radius: 0 6px 6px 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  margin: 8px 0 18px;
+}
+.cs-figure {
+  margin: 18px 0 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0d1117;
+}
+.cs-figure img { display: block; width: 100%; height: auto; cursor: zoom-in; }
+.cs-figure figcaption {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+}
+.cs-link { color: var(--accent); text-decoration: none; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; align-self: center; }
+.cs-link:hover { text-decoration: underline; }
+.cs-stack { margin-top: 26px; }
+
+/* skills */
+.skill-group { margin-bottom: 22px; }
+.skill-group h4 {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 10px;
+}
+.skill-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+
+/* experience timeline */
+.timeline { position: relative; padding-left: 22px; }
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 6px; top: 4px; bottom: 4px;
+  width: 2px; background: var(--line);
+}
+.timeline-item { position: relative; margin-bottom: 24px; }
+.timeline-item::before {
+  content: "";
+  position: absolute;
+  left: -22px; top: 6px;
+  width: 12px; height: 12px;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.timeline-item .when {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  letter-spacing: 0.1em;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+.timeline-item h3 { font-size: 16px; font-weight: 600; }
+.timeline-item .org { color: var(--accent); font-size: 14px; margin-bottom: 6px; }
+
+/* contact buttons */
+.contact-list { display: flex; flex-direction: column; gap: 10px; }
+.contact-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  transition: all 0.2s;
+  text-decoration: none;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.contact-row:hover { border-color: var(--accent); background: var(--accent-soft); transform: translateX(4px); }
+.contact-row .ico { width: 18px; height: 18px; color: var(--accent); }
+.contact-row .lbl { color: var(--ink-faint); width: 90px; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; }
+
+/* button */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--accent);
+  color: white !important;
+  padding: 10px 18px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: none !important;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none !important;
+}
+.btn:hover { background: #1657d4; transform: translateY(-1px); }
+
+/* resume: multiple role-specific downloads + certifications */
+.resume-downloads { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+.cert-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cert-list li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+.cert-list li::before {
+  content: "▸";
+  position: absolute; left: 0; top: 0;
+  color: var(--accent);
+}
+
+/* status toast — appears when arm is working */
+.toast {
+  position: fixed;
+  top: 60px; right: 24px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  padding: 12px 18px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  transform: translateX(20px);
+  transition: all 0.3s;
+  z-index: 20;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateX(0); }
+.toast .working {
+  display: inline-block;
+  width: 8px; height: 8px;
+  background: var(--warn);
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: middle;
+  animation: pulse 0.8s infinite;
+}
+
+/* ============================================================
+   RESPONSIVE  — phones get a compressed version with the arm intact
+============================================================ */
+
+/* TABLET — slightly tighter layout */
+@media (max-width: 1024px) {
+  .scene { width: 96vw; height: 78vh; }
+  .crate { width: 110px; height: 110px; }
+}
+
+/* PHONE — keep the arm, but shrink the whole scene and stack the hero on top */
+@media (max-width: 700px) {
+  body { overflow: hidden; }
+
+  .hud { padding: 12px 14px; font-size: 9.5px; letter-spacing: 0.06em; }
+  .hud .group { gap: 12px; }
+  .hud .group:last-child .brand { display: none; }
+  /* On very small screens, hide a couple of secondary HUD bits */
+  .hud.top .group:first-child > span:not(.brand) { display: none; }
+
+  .scene {
+    width: 100vw;
+    height: 100vh;
+    margin-top: 0;
+  }
+
+  .hero {
+    top: 56px;
+    left: 16px;
+    right: 16px;
+    max-width: none;
+    pointer-events: none;  /* don't block taps on the scene */
+  }
+  .hero .eyebrow {
+    font-size: 9.5px;
+    margin-bottom: 14px;
+    letter-spacing: 0.04em;
+  }
+  .hero .eyebrow::before { width: 18px; }
+  .hero h1 {
+    font-size: clamp(26px, 7vw, 34px);
+    margin-bottom: 8px;
+  }
+  .hero p {
+    font-size: 12.5px;
+    line-height: 1.55;
+    max-width: 100%;
+  }
+  .hero .instr {
+    font-size: 9.5px;
+    margin-top: 10px;
+  }
+
+  /* Ceiling rail — same idea, sized down */
+  .rail { top: 38%; height: 8px; }
+  .rail::before, .rail::after { width: 12px; height: 18px; top: -6px; }
+
+  /* Shrink the arm proportionally so it fits between hero and crates */
+  .arm-mount {
+    top: 38%;
+    transform: translateX(-50%) scale(0.55);
+    transform-origin: top center;
+  }
+  .base { width: 70px; left: -35px; }
+
+  /* Crates: 3 columns x 2 rows, tighter, lifted off the bottom */
+  .crates {
+    bottom: 50px;
+    gap: 10px;
+    padding: 0 12px;
+  }
+  .crate {
+    width: calc(33.333% - 8px);
+    height: 90px;
+    padding: 6px;
+  }
+  .crate .icon { top: 8px; width: 20px; height: 20px; }
+  .crate .label { font-size: 8.5px; padding: 3px 5px; letter-spacing: 0.1em; }
+  .crate .id { font-size: 7px; top: 3px; right: 4px; }
+
+  /* Panel overlay — full-screen sheet on phones */
+  .panel-overlay { padding: 0; }
+  .panel { border-radius: 0; }
+  .panel-header { padding: 12px 16px; }
+  .panel-header .crumbs { font-size: 9px; letter-spacing: 0.1em; }
+  .panel-body { padding: 20px 18px 40px; }
+  .gallery { grid-template-columns: 1fr; }
+  .tile-grid { grid-template-columns: 1fr; }
+  .about-photo {
+    float: none;
+    width: 200px;
+    max-width: 70%;
+    margin: 0 auto 22px;
+  }
+  .case-study { padding: 16px 14px 18px; }
+  .cs-lead { font-size: 15.5px !important; }
+  .panel-body h2 { font-size: 22px; }
+  .panel-body p { font-size: 14px; }
+  .project-grid { grid-template-columns: 1fr; gap: 12px; }
+  .toast { top: 50px; right: 10px; font-size: 9.5px; padding: 8px 12px; }
+}
+
+/* VERY SMALL phones — 2 columns of crates so labels remain readable */
+@media (max-width: 420px) {
+  .crate { width: calc(50% - 6px); height: 85px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     TOP HUD
+============================================================ -->
+<div class="hud top">
+  <div class="group">
+    <span class="brand" id="hud-brand">CYBERNETICS // PORTFOLIO</span>
+    <span>UNIT_005</span>
+  </div>
+  <div class="group">
+    <span><span class="dot"></span> ONLINE · SEEKING</span>
+    <span id="clock">00:00:00</span>
+  </div>
+</div>
+
+<!-- ============================================================
+     BOTTOM HUD
+============================================================ -->
+<div class="hud bottom">
+  <div class="group">
+    <span>SYS://AUTONOMOUS_MODE</span>
+    <span>OPS <span id="op-count">0</span></span>
+  </div>
+  <div class="group">
+    <span id="status-text">AWAITING_INPUT</span>
+  </div>
+</div>
+
+<!-- ============================================================
+     STAGE
+============================================================ -->
+<div class="stage">
+  <div class="scene">
+
+    <!-- Hero text -->
+    <div class="hero">
+      <div class="eyebrow" id="hero-eyebrow">ROBOTICS · AI · MBA</div>
+      <h1 id="hero-name">Hi, I'm <span class="accent">[Your Name]</span></h1>
+      <p id="hero-bio">Engineer at the intersection of artificial intelligence, robotics, and business strategy. B.Tech in AI with robotics electives, MBA in strategy. Now looking for what comes next.</p>
+      <div class="instr">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        SELECT A CRATE BELOW
+      </div>
+    </div>
+
+    <!-- Ceiling rail -->
+    <div class="rail"></div>
+
+    <!-- Robotic arm -->
+    <div class="arm-mount">
+      <div class="base"></div>
+      <div class="arm" id="arm">
+        <div class="shoulder" id="shoulder">
+          <div class="upper-arm">
+            <div class="cable"></div>
+          </div>
+          <div class="elbow" id="elbow">
+            <div class="forearm"></div>
+            <div class="wrist" id="wrist">
+              <div class="gripper-housing"></div>
+              <div class="claw left"></div>
+              <div class="claw right"></div>
+              <div class="held-box"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Crates (rendered by JS from CONFIG) -->
+    <div class="crates" id="crates"></div>
+  </div>
+</div>
+
+<!-- ============================================================
+     PANEL (renders content for selected section)
+============================================================ -->
+<div class="panel-overlay" id="panel-overlay">
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-header-left">
+        <button type="button" class="panel-back" id="panel-back" aria-label="Back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+          <span>Back</span>
+        </button>
+        <div class="crumbs">
+          <span>WAREHOUSE</span>
+          <span class="sep">/</span>
+          <span>SECTOR_A</span>
+          <span class="sep">/</span>
+          <span class="active" id="panel-crumb">—</span>
+        </div>
+      </div>
+      <button type="button" class="panel-close" id="panel-close" aria-label="Close">✕</button>
+    </div>
+    <div class="panel-body" id="panel-body"></div>
+  </div>
+</div>
+
+<!-- Status toast -->
+<div class="toast" id="toast"><span class="working"></span><span id="toast-text">PICKING…</span></div>
+
+<!-- Lightbox for enlarging project screenshots -->
+<div class="lightbox" id="lightbox"><img id="lightbox-img" alt=""></div>
+
+<!-- ============================================================
+     CONFIG  — everything you'll edit lives in this single object.
+     Add new sections, projects, skills, etc. by editing here only.
+============================================================ -->
+<script>
+const CONFIG = {
+
+  // ---------- HEADER / HERO ----------   // shown top-left in HUD
+  eyebrow: "B.Tech (AI & Robotics) · MBA (Information Systems)",      // tagline above your name
+  name: "Vireen Chowdary",                  // your name (will appear in accent color)
+  bio: "Business analyst with a background in AI and robotics. I like working where engineering, operations, and leadership meet. I love working and translating between teams, building the decision-support layer, and making sure the right decisions get made for the right reasons.",
+
+  // ---------- SECTIONS ----------
+  // To add a new section (e.g. "Writings"):
+  //   1. Add an object below with a unique `id`.
+  //   2. Pick a `type` from: about | projects | skills | experience | resume | contact | custom
+  //   3. If using `type: "custom"`, put your raw HTML in the `html` field.
+  // The crates will render in this order. Reorder freely.
+  sections: [
+    {
+      id: "about",
+      label: "ABOUT",
+      icon: "user",            // see ICONS at bottom; add new svgs there if needed
+      type: "about",
+      content: {
+        headline: "Profile",
+        image: "assets/vireen_passpic.jpg",   // portrait shown top-right of the About text
+        paragraphs: [
+          "I'm a builder at heart. When there's a problem worth solving, I tend to build my way into it — a dashboard, a model, a script, a whole product, whatever the problem actually needs. What pulls me is that moment where good analysis, a clear structure, or the right thing built quietly decides whether something scales or stalls. And I don't wait to be asked: if I can see the thing that needs to exist, I go make it.",
+          "The way I've always worked is simple: I learn whatever the problem needs, then I build the thing. I didn't know React or FastAPI, so I taught myself both and shipped Captain's Call — a live, deployed IPL match simulator with a pandas pipeline running 2,95,733 ball-by-ball deliveries, a probabilistic engine underneath and a monte carlo simulation of the same teams played together 2000 times. That's the pattern across everything I do. During my AI internship at Ozonetel, I worked on a BERT-based NLP product for customer-support teams and built the front-end that turned the model's output into something business users could actually use. On my own, I built a local-LLM copilot that turns messy operational notes into structured, decision-ready reports. And back in my engineering days at Amrita, I built location-details extraction from an image — which I recently transformed into a portfolio project I named Geospot, which predicts the country in a photo by fusing three signals (visual scene, text/script, and flags) with per-module attribution — a 2026 rebuild of my 2022 B.Tech university project, Simulation study of bipedal humanoids (NAO, Darwin) evaluating stair-climbing feasibility; built Python control scripts to test stability parameters and modelled locomotion dynamics, framing inverse kinematics.",
+          "The same instinct shows up on the analytics and strategy side. I ran a full mixed-methods research study on how AR/VR campaigns shape brand trust and loyalty — 134 survey responses, retailer interviews, and regression and hypothesis testing to find what actually moved the needle. I've built Power BI dashboards that turn tangled data into clear go/no-go calls, done SQL work across datasets with hundreds of thousands of rows, written executive proposal decks, and put together boardroom strategy for business simulations. I've even designed and built full websites for local cafés and bars in my city, start to finish, pitch included. My B.Tech in Artificial Intelligence taught me how engineering teams think; my MBA in Information Systems and Analytics taught me how decisions get made — so I'm comfortable in the technical room and the strategy room both, and I'm not precious about which one I'm in. Point me at a hard problem — technical, analytical, strategic, or all three — and I'll figure out what to build.",
+          "Outside of work, when I want to play intensely, it's Valorant or Counter-Strike 2; when I want to switch off, it's GTA V or Spider-Man. I produce music in FL Studio, mostly slow lo-fi — the kind of stuff you'd put on at 1 AM. I play a lot of pickleball. And I vibe-code small tools when an idea won't leave me alone — an IPL auction dashboard for college, side projects, things that exist mostly to scratch an itch. They're different muscles, but they all train the same thing: patience with iteration."
+        ]
+      }
+    },
+
+    {
+      id: "projects",
+      label: "PROJECTS",
+      icon: "box",
+      type: "projects",
+      content: {
+        headline: "Selected Work",
+        // ── Projects are organized into GROUPS. ──
+        // Opening the Projects crate shows a chooser of project tiles; clicking a
+        // tile opens that project's full case study (with a "← All projects" back button).
+        //
+        // Each group: { title, items: [ ...projects ] }
+        // A project supports:
+        //   title, tag, description, links[]  (link: { label, url, primary? })
+        //   thumb: "path"       → tile thumbnail in the chooser
+        //   heroVideo: { youtube: "ID" } → muted-autoplay video at top of the case study
+        //   heroGif / heroImage: "path"  → looping/hero image at top of the case study
+        //   stack: [ "Python", ... ]     → tech-stack chips
+        //   summary: [ "..." ]  → longer paragraphs (HTML allowed)
+        //   highlights: [ ... ] → bullet list
+        //   body: [ blocks ]    → flexible content: {lead},{p},{h},{bullets},{image,caption},{note}
+        //   gallery: [ { src, caption } ] → image grid (click any image to enlarge)
+        // Missing image files simply hide themselves. Empty groups are skipped.
+        groups: [
+          {
+            title: "Portfolio Projects",
+            items: [
+              {
+                title: "Pilot-to-Scale Decision Support for Autonomous Robotics",
+                tag: "DECISION SUPPORT · POWER BI · LOCAL LLM",
+                thumb: "assets/pilot-to-scale/dashboard-overview.png",
+                description: "A self-directed framework for the Business Analyst role in autonomous robotics — pairing a Power BI Pilot Readiness Dashboard with a privacy-first, local-LLM \"Robotics BA Copilot\" that turns messy operational notes into decision-ready artifacts.",
+                // Muted autoplay walkthrough; visitors can unmute via the player controls.
+                heroVideo: { youtube: "7Ff7_FlanCI" },
+                summary: [
+                  "An independent, assumption-based study built around a gap I kept noticing: as robotics companies move from pilots to scaled, public-facing deployments, the binding constraint stops being engineering capability and becomes decision quality — the ability to make consistent, evidence-based calls about readiness, safety, and customization across many pilots and environments.",
+                  "I designed a two-part decision-support system. A <strong>Pilot Readiness Dashboard</strong> gives leadership a shared, quantitative view of pilot health — safety incidents, human interventions, uptime, mission success — resolving into a clear Go / Hold / Stop per pilot. A <strong>Robotics BA Copilot</strong>, running on a local LLM, converts unstructured pilot notes, incident reports, and customization requests into structured requirements, risks, action items, and classifications.",
+                  "Together they close the loop: the dashboard shows <em>what</em> is happening; the Copilot explains <em>why</em>, and what to consider doing about it. All data is synthetic and illustrative — the point is the decision structure, not any one company."
+                ],
+                highlights: [
+                  "Power BI dashboard across three views: an executive Pilot Overview, a Safety Deep-Dive, and a decision-oriented Scale Readiness Snapshot.",
+                  "Local, privacy-first LLM Copilot with four modes: Weekly Pilot Notes, Incident Triage, Customization Assessment, and Cross-Pilot Synthesis.",
+                  "An industry phase-map and a five-stage Pilot-to-Scale lifecycle that position each tool as a targeted intervention.",
+                  "Structured, copyable outputs (JSON / Markdown) designed to slot into real BA review workflows."
+                ],
+                stack: ["Power BI", "DAX", "Python", "pandas", "Local LLM (Ollama)", "Streamlit"],
+                links: [
+                  { label: "▶ Live Demo (2-min walkthrough)", url: "https://youtu.be/7Ff7_FlanCI", primary: true },
+                  { label: "Full report on request", url: "https://drive.google.com/file/d/194f_L_XyoDkYcH9Zi4eHtz1ly-s-bj7C/view?usp=sharing" }
+                ],
+                gallery: [
+                  { src: "assets/pilot-to-scale/dashboard-overview.png",   caption: "Pilot Operations Overview — executive view: active pilots, robots, uptime, and safety status." },
+                  { src: "assets/pilot-to-scale/dashboard-safety.png",     caption: "Safety Deep-Dive — incident, near-miss, and human-intervention trends by pilot and week." },
+                  { src: "assets/pilot-to-scale/dashboard-readiness-1.png", caption: "Scale Readiness Snapshot (1/2) — aggregate safety, reliability, and customization indicators." },
+                  { src: "assets/pilot-to-scale/dashboard-readiness-2.png", caption: "Scale Readiness Snapshot (2/2) — per-pilot Go / Hold / Stop decision table." },
+                  { src: "assets/pilot-to-scale/copilot-interface.png",    caption: "Robotics BA Copilot — mode selection and input (local LLM, privacy-first)." },
+                  { src: "assets/pilot-to-scale/copilot-weekly-p1.png",    caption: "Weekly Pilot Analysis (Pilot 1) — GO: summary, requirements, risks, actions, customization candidates." },
+                  { src: "assets/pilot-to-scale/copilot-weekly-p2.png",    caption: "Weekly Pilot Analysis (Pilot 2) — STOP: driven by frequent safety incidents." },
+                  { src: "assets/pilot-to-scale/copilot-incident.png",     caption: "Incident Triage — severity, root cause, containment, recommended actions, readiness impact." },
+                  { src: "assets/pilot-to-scale/copilot-customization.png", caption: "Customization Classification — core / non-core with rationale, effort, and risks." },
+                  { src: "assets/pilot-to-scale/lifecycle.png",            caption: "The five-stage Pilot-to-Scale lifecycle — a decision-oriented loop, not a checklist." },
+                  { src: "assets/pilot-to-scale/phase-map.png",            caption: "Industry phase map — where decision-support becomes load-bearing as companies mature." }
+                ]
+              },
+
+              {
+                title: "Captain's Call — Live IPL Match Simulator",
+                tag: "DATA SCIENCE · FULL-STACK · MONTE CARLO",
+                thumb: "assets/captains-call/Main_menu_screenshot.png",
+                description: "A live, data-driven IPL (T20) simulator you can actually play: build two XIs from real cricketers, captain the match ball-by-ball, and let a probabilistic engine simulate every delivery from how those players have really performed — then a Monte Carlo engine replays the match thousands of times to estimate win probability.",
+                heroGif: "assets/captains-call/demo.gif",
+                // "Play it live" is the strongest element — most projects can't be tried.
+                links: [
+                  { label: "▶ Play it live", url: "https://captain-call.vercel.app/", primary: true },
+                  { label: "GitHub", url: "https://github.com/Vireen555/captains-call-ipl-simulator" }
+                ],
+                body: [
+                  { lead: "Settle the cricket argument yourself. Pick the teams, win the toss, set each batter's intent, choose your bowlers over by over, and captain a full T20 innings — the engine simulates every ball from real player data, then tells you how often you'd actually win." },
+                  { p: "Captain's Call began as a B.Tech project that never really worked. I rebuilt it from scratch, solo and end to end, into a real system that's deployed and publicly playable — the kind of thing you can send someone and they can try in thirty seconds." },
+
+                  { h: "What it does" },
+                  { bullets: [
+                    "Build two full XIs from real IPL cricketers and pick your playing conditions.",
+                    "Captain ball-by-ball: set batter <em>intent</em>, rotate bowlers each over, and use impact substitutions.",
+                    "A probabilistic engine simulates every delivery — dot, 1, 2, 4, 6, or wicket — conditioned on the specific batter, bowler, era, and phase of the innings.",
+                    "At the end, a Monte Carlo engine replays the match thousands of times to estimate each side's win probability."
+                  ] },
+                  { image: "assets/captains-call/Team_builder_panel_screnshot.png", caption: "Team Builder — assemble two XIs from real cricketers." },
+                  { image: "assets/captains-call/Live_match_scorecard.png", caption: "Live match — captain the innings ball-by-ball with intent, bowling changes, and substitutions." },
+
+                  { h: "Under the hood — the data science" },
+                  { p: "The core is a <strong>per-ball probabilistic outcome model</strong>: for any delivery it produces a distribution over six outcomes, conditioned on batter, bowler, era, and innings phase." },
+                  { p: "The foundation is IPL ball-by-ball data spanning <strong>2008–2026 (~18 seasons)</strong> — roughly <strong>1,240 matches</strong> and <strong>~280,000 ball-by-ball deliveries</strong> processed." },
+                  { bullets: [
+                    "<strong>Empirical-Bayes shrinkage</strong> for reliability, so small samples don't produce wild estimates.",
+                    "A <strong>multi-level hierarchical back-off</strong> (sub-phase → phase → player → role-group → league) that stabilises sparse players by borrowing strength from broader levels.",
+                    "A <strong>26,250-cell player-parameter grid</strong> per discipline (625 players × 7 innings sub-phases × 6 outcomes), across 4 eras.",
+                    "A <strong>Monte Carlo win-probability engine</strong> — 2,000 simulations per match — with calibration and validation against real data (~1 percentage-point mean error).",
+                    "Diagnosed and fixed a real statistical bias: a 64/36 outcome skew traced to truncated batting orders, corrected back to ~50/50."
+                  ] },
+                  // ⚠ VERIFY from repo: replace "1,240 matches" and "~280,000 ... deliveries"
+                  //   in the paragraph above with your exact integers before sharing widely.
+
+                  { h: "Under the hood — the engineering" },
+                  { bullets: [
+                    "A <strong>stateless Python / FastAPI</strong> simulation backend: state-in → state-out, one ball per call, structured-event outputs, with rules enforced server-side.",
+                    "A reactive <strong>React (Vite)</strong> frontend that derives its entire UI as a pure function of the backend's event stream.",
+                    "Shipped to production — <strong>Vercel</strong> (frontend) + <strong>Render</strong> (backend) — with usage analytics and an in-app feedback loop. A real product, not just a repo.",
+                    "A GPU-free <strong>pytest</strong> suite including invariant and monotonicity tests."
+                  ] },
+                  { image: "assets/captains-call/Results_screenshot.png", caption: "Result screen — Monte Carlo win-probability estimate after simulating the match thousands of times." },
+                  { p: "One thing I keep in the open: death-over scoring currently overshoots slightly, because the sim faces an <em>average</em> bowler rather than a death specialist. It's a known, explainable limitation — I'd rather document it than hide it." }
+                ],
+                stack: ["Python", "pandas", "FastAPI", "REST API", "React", "Vite", "JavaScript", "Monte Carlo simulation", "Probabilistic modelling", "Empirical-Bayes shrinkage", "Hierarchical modelling", "Vercel", "Render", "Git"]
+              },
+
+              {
+                title: "GeoSpot — Multi-modal Image Geolocation",
+                tag: "COMPUTER VISION · MULTI-MODAL · PyTorch",
+                thumb: "assets/geospot/demo_static.png",
+                description: "Predicts the country in a photo by fusing three independent signals — visual scene, on-image text/script, and national flags — and shows which evidence drove the call. A clean 2026 rebuild of my 2022 B.Tech group project.",
+                heroImage: "assets/geospot/demo_static.png",
+                links: [
+                  // TODO Vireen: confirm the repo URL if the slug differs.
+                  { label: "GitHub", url: "https://github.com/Vireen555/geospot", primary: true }
+                ],
+                body: [
+                  { lead: "GeoSpot takes an image and produces a probability distribution over countries — plus a breakdown of which evidence drove the prediction. It's not a production geolocator (companies do that with billions of geotagged photos); it's a portfolio project built to ship cleanly and demonstrate sound ML-engineering judgment around an interesting fusion architecture." },
+
+                  { h: "How it works — three signals, one answer" },
+                  { bullets: [
+                    "<strong>Scene</strong> — zero-shot image→country similarity via OpenCLIP ViT-B/32, ensembling 8 prompt templates per country.",
+                    "<strong>Text</strong> — EasyOCR with 8 script-specific reader pools (Devanagari, Bengali, Arabic, Cyrillic, Han, Japanese, Hangul, Thai); identifies the Unicode script and maps it to a country prior.",
+                    "<strong>Flag</strong> — YOLOv8n fine-tuned to detect national flags as bounding boxes.",
+                    "<strong>Trust-weighted fusion</strong> — combines the three into a final distribution. The key property: every module also publishes its top guesses and reasoning, so the UI can show <em>why</em> it made a call, not just <em>what</em> it predicted."
+                  ] },
+
+                  { h: "See it in action" },
+                  { p: "The interesting behaviour is in how fusion handles disagreement between modules:" },
+                  { image: "assets/geospot/demo_tokyo.gif", caption: "Tokyo — the text module misreads dense kana as Cyrillic (→ Russia, 72%); trust-weighted fusion down-weights it and correctly lands on Japan. One module's bad read can't hijack the result." },
+                  { image: "assets/geospot/demo_turkey.gif", caption: "Turkey — modules disagree; scene (52%) edges out a noisy text read and fusion resolves to the correct answer. Narrow, but right." },
+                  { image: "assets/geospot/demo_china_failure.gif", caption: "Known failure mode — Korean flags in a Chinese market push the flag module to 100% confidence and drag fusion to South Korea. Documented, not hidden." },
+
+                  { h: "Performance & the case for measuring" },
+                  { p: "On a 23-image hand-labeled test set (20 countries, deliberately mixed): <strong>73.9% top-1</strong> and <strong>87.0% top-3</strong> end-to-end." },
+                  { bullets: [
+                    "Trust weights (Scene 50 / Flag 30 / Text 20) were set from <strong>measured precision, not guesswork</strong>.",
+                    "Evaluation showed flag (50% precision) actually beats text (17.6%) when each fires — the opposite of my initial theoretical weighting.",
+                    "Re-weighting to match the data lifted top-1 from 66.7% → 73.9%. Measuring mattered more than reasoning about what <em>should</em> be true."
+                  ] },
+
+                  { h: "A 2026 rebuild — with judgment" },
+                  { bullets: [
+                    "<strong>Dropped the 2022 ethnicity-detection module</strong> — statistically weak (most ethnicities span many countries) and ethically wrong (trivially repurposes for surveillance). GeoSpot looks at what's in a photo, not who's in it.",
+                    "<strong>Replaced hand-picked fusion weights</strong> with precision-calibrated trust weights, plus graceful MLP-fusion scaffolding for a future learned head.",
+                    "<strong>Modernized the scene module</strong> from a custom CNN to a pretrained CLIP model — the single biggest improvement over the original.",
+                    "<strong>Kept text + flag for attribution</strong>: 'scene + detected Hiragana + Japanese flag at 0.92' is a real answer to \"why Japan?\", where 'the embedding said so' isn't.",
+                    "Engineered synthetic <strong>flag-in-scene</strong> training data (pasting real flags onto street backgrounds) after diagnosing that naive whole-image training just predicted one country everywhere; graceful fallbacks keep the pipeline shippable mid-development."
+                  ] },
+
+                  { note: "Honest scope: text precision is low (EasyOCR confuses some scripts), a confident-but-wrong flag can still mislead fusion, synthetic flag training leaves a sim-to-real gap, and 23 images means wide confidence intervals — all documented as future work (learned fusion head, PaddleOCR, a larger test set)." }
+                ],
+                stack: ["Python", "PyTorch", "OpenCLIP", "YOLOv8 (Ultralytics)", "EasyOCR", "Multi-modal fusion", "Gradio", "uv", "pytest"]
+              },
+
+              {
+                title: "Global Conflict Intelligence Dashboard",
+                tag: "DATA ANALYTICS · STREAMLIT · AUTOMATION",
+                thumb: "assets/global-conflict-intelligence-dashboard/Structured_conflict1.png",
+                description: "A hybrid conflict-monitoring dashboard that pairs a live war-news pulse (GDELT) with a structured conflict-event layer (ACLED), kept fresh by an automated GitHub Actions refresh pipeline.",
+                heroImage: "assets/global-conflict-intelligence-dashboard/Recent_war1.png",
+                links: [
+                  { label: "GitHub", url: "https://github.com/Vireen555/global-conflict-intelligence-dashboard", primary: true }
+                ],
+                body: [
+                  { lead: "A project that sits where global affairs meets data engineering: a visually polished, self-updating dashboard for monitoring conflict-related developments around the world — recent media signals on one side, historical structured conflict data on the other." },
+
+                  { h: "Tab 1 — Recent War News Pulse" },
+                  { p: "Powered by the <strong>GDELT DOC 2.0 API</strong>, this tab tracks recent conflict-related media coverage and turns it into readable signal: recent article counts, top source countries and domains, language distribution, a rule-based conflict-topic breakdown, the latest headlines, and an auto-generated summary insight box." },
+                  { image: "assets/global-conflict-intelligence-dashboard/Recent_war1.png", caption: "Recent War News Pulse — recent-coverage metrics, topic breakdown, and summary insight." },
+                  { image: "assets/global-conflict-intelligence-dashboard/Recent_war2.png", caption: "Recent War News Pulse — source countries, domains, language mix, and latest headlines." },
+
+                  { h: "Tab 2 — Structured Conflict Dashboard" },
+                  { p: "Built on cleaned <strong>ACLED</strong> data, this tab focuses on structured conflict-event analytics: event and fatality KPIs, an interactive <strong>PyDeck</strong> conflict map, event-type breakdowns, daily event trends, fatalities by region, and a recent-events table." },
+                  { image: "assets/global-conflict-intelligence-dashboard/Structured_conflict1.png", caption: "Structured Conflict Dashboard — KPIs and an interactive geographic conflict map." },
+                  { image: "assets/global-conflict-intelligence-dashboard/Structured_conflict2.png", caption: "Structured Conflict Dashboard — event-type breakdown, trends, and regional fatalities." },
+
+                  { h: "Automation — a monitoring system, not a static dashboard" },
+                  { bullets: [
+                    "A <strong>GitHub Actions</strong> workflow fetches recent GDELT war-news data on a schedule.",
+                    "It cleans and filters the raw feed, writes processed CSVs, and commits the refreshed data back to the repo.",
+                    "That scheduled refresh turns a one-off dashboard into a lightweight, continuously-updating monitoring system."
+                  ] },
+
+                  { note: "Honest scope: GDELT gives article/news metadata rather than fully structured events, topic detection is currently rule-based (some noise remains), and detailed recent ACLED access depends on account level — all noted as future-improvement paths (better topic classification, tone analysis, article-level geolocation, Streamlit Cloud deployment)." }
+                ],
+                stack: ["Python", "pandas", "Streamlit", "Plotly", "PyDeck", "GDELT DOC 2.0 API", "ACLED", "GitHub Actions"]
+              },
+
+              {
+                title: "Population Health Management — Community Health Analytics",
+                tag: "POWER BI · DAX · DATA MODELLING",
+                thumb: "assets/phm-healthcare-powerbi-dashboard/dashboard-1.png",
+                description: "A five-page Power BI report that takes a population-health view of community health across 20 Indian city clusters — moving from \"how healthy is this population?\" down to \"which 500 patients should a care team call on Monday morning?\"",
+                heroImage: "assets/phm-healthcare-powerbi-dashboard/dashboard-1.png",
+                links: [
+                  { label: "GitHub", url: "https://github.com/Vireen555/phm-healthcare-powerbi-dashboard", primary: true }
+                ],
+                body: [
+                  { lead: "Most healthcare dashboards stop at descriptive reporting — how many admissions, how many beds. Population health management asks the harder question: given a fixed budget, where does the next rupee of prevention spending do the most good? This report is built to answer it." },
+                  { p: "The model links clinical risk, chronic-disease control, social determinants of health (SDoH), and public-health surveillance into a single <strong>snowflake model</strong> hubbed on community demographics — <strong>7 tables across two grains</strong> (5,000 patients and 20 regions) — then layers <strong>what-if parameters</strong> on top so a planner can simulate an intervention before funding it." },
+
+                  { h: "A five-page narrative arc" },
+                  { bullets: [
+                    "<strong>Community Health</strong> — <em>where</em> is the burden? A geospatial risk map plus chronic count vs. prevalence % by state.",
+                    "<strong>Risk Stratification</strong> — <em>who</em> needs a care manager? A right-skewed risk distribution resolving into a callable Top-10% roster (~500 patients, avg. 72 yrs, 4.6 chronic conditions).",
+                    "<strong>Chronic Disease</strong> — <em>why</em> are they at risk clinically? HbA1c spread, remote-monitoring adoption (only ~30%), and an adherence-vs-complication signal.",
+                    "<strong>Social Determinants</strong> — <em>what</em> non-clinical barriers exist? A conditionally-formatted equity matrix by region and food security.",
+                    "<strong>Public Health Surveillance</strong> — <em>what's about to go wrong?</em> Flu volume, an alert-level map, and a respiratory search-trend early-warning index (bed occupancy sits at a tight 94.6%)."
+                  ] },
+                  { image: "assets/phm-healthcare-powerbi-dashboard/dashboard-1.png", caption: "1 · Community Health — geospatial risk map; chronic count vs. prevalence % by state." },
+                  { image: "assets/phm-healthcare-powerbi-dashboard/dashboard-2.png", caption: "2 · Risk Stratification — right-skewed risk distribution and the Top-10% high-risk roster." },
+                  { image: "assets/phm-healthcare-powerbi-dashboard/dashboard-3.png", caption: "3 · Chronic Disease — HbA1c spread, remote-monitoring adoption, adherence vs. complication risk." },
+                  { image: "assets/phm-healthcare-powerbi-dashboard/dashboard-4.png", caption: "4 · Social Determinants & Equity — social-risk matrix by region and food security." },
+                  { image: "assets/phm-healthcare-powerbi-dashboard/dashboard-5.png", caption: "5 · Public Health Surveillance — flu volume, alert-level map, and respiratory-trend gauges." },
+
+                  { h: "From a report to a planning tool" },
+                  { p: "Four disconnected what-if parameter tables (built with <strong>GENERATESERIES</strong>) let a planner drag levers — vaccination coverage, lifestyle-program reach, remote-monitoring adoption, SDoH funding — and watch projected admissions, cost savings, and the population-health score respond, without touching the data. Under the hood: <strong>CALCULATE</strong> for cohort-scoped KPIs, <strong>RANKX</strong> for the top-decile roster, and deliberate bidirectional cross-filtering so geography slicers propagate from a satellite table through the hub into patient-grain facts." },
+
+                  { note: "Honest by design: the data is fully synthetic (no real patient data or PHI). Every published KPI was validated against the source CSVs, and I explicitly document where the visuals could imply an SDoH→outcome relationship that the generated data doesn't actually support — I'd rather flag that than let a reader infer it." }
+                ],
+                stack: ["Power BI", "DAX", "Power Query", "Snowflake data modelling", "What-If parameters", "RANKX / CALCULATE", "Synthetic data", "Healthcare analytics"]
+              }
+              // Add more portfolio projects here.
+            ]
+          },
+          {
+            title: "Academic Projects",
+            items: [
+              // Add your academic projects here — e.g.:
+              // {
+              //   title: "Senior Thesis — Sim-to-Real for Manipulation",
+              //   tag: "ROBOTICS · RL",
+              //   description: "...",
+              //   links: [ { label: "Report", url: "#" } ]
+              // }
+            ]
+          },
+          {
+            title: "Data & Analytics Projects",
+            items: [
+              // e.g. the IPL auction dashboard, other BI/analytics work.
+            ]
+          },
+          {
+            title: "AI / ML Projects",
+            items: [
+              // e.g. models, fine-tuning, vision projects.
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      id: "experience",
+      label: "EXPERIENCE",
+      icon: "briefcase",
+      type: "experience",
+      content: {
+        headline: "Experience",
+        items: [
+          {
+            when: "MAY 2025 – JUL 2025",
+            role: "Data & Business Analyst Intern",
+            org: "Symbiosis Technologies · Visakhapatnam",
+            bullets: [
+              "Gathered and reconciled 1,500+ multi-currency invoice records from client databases, invoice exports, and web forms; built an automated Python currency-conversion workflow (with API fallback) to standardize reporting.",
+              "Wrote SQL (joins, aggregations, subqueries) and used Python + Advanced Excel to clean, transform, and validate data across verticals.",
+              "Built 3 Tableau dashboards over ~₹2.7 Cr in overdue exposure; isolated ~₹1.2 Cr concentrated in a single high-risk market and a client holding ~₹72 L in receivables.",
+              "Showed via Spearman correlation (ρ = -0.001, p = 0.989) that invoice size did not predict payment delay — refocusing management from invoice value to client-behaviour patterns.",
+              "Ran SPSS segmentation revealing elevated delinquency on 45-day terms, leading to a credit-policy recommendation to improve cash-flow visibility."
+            ]
+          },
+          {
+            when: "FEB 2023 – MAY 2023",
+            role: "Artificial Intelligence Intern",
+            org: "Ozonetel Communications · Hyderabad",
+            bullets: [
+              "Built the front-end web interface for an Agent Assist AI product, integrating a FastAPI backend with the customer-facing UI.",
+              "Applied BERT-based NLP to unstructured customer-interaction data and contributed to model-validation workflows in a production business context."
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      id: "education",
+      label: "EDUCATION",
+      icon: "cap",
+      type: "education",
+      content: {
+        headline: "Education",
+        schools: [
+          {
+            when: "2024 – 2026",
+            degree: "MBA — Information Systems, Analytics & International Business",
+            org: "GITAM University · Visakhapatnam",
+            notes: [
+              "CGPA: 7.6 / 10.",
+              "Focus on decision support, BI/analytics, and how leadership decisions actually get made."
+            ]
+          },
+          {
+            when: "2019 – 2023",
+            degree: "B.Tech — Artificial Intelligence Engineering (Robotics Specialization)",
+            org: "Amrita Vishwa Vidyapeetham · Amritapuri",
+            notes: [
+              "CGPA: 7.5 / 10.",
+              "Robotics-focused coursework and projects — computer vision, control, and autonomous systems."
+            ]
+          },
+          {
+            when: "2017 – 2019",
+            degree: "Intermediate (Class XI–XII)",
+            org: "Board of Intermediate Education · Andhra Pradesh",
+            notes: [
+              "CGPA: 9.61 / 10."
+            ]
+          },
+          {
+            when: "2016 – 2017",
+            degree: "Class X",
+            org: "Central Board of Secondary Education (CBSE)",
+            notes: [
+              "CGPA: 10 / 10."
+            ]
+          }
+        ],
+        achievements: [
+          "Shore Fest Datathon — 1st Place.",
+          "Selected for Microsoft Engage 2021 (mentorship program)."
+        ],
+        activities: [
+          "Member, Robotics Club — Amrita Vishwa Vidyapeetham.",
+          "Member, eSports SIG Club — GITAM University."
+        ]
+      }
+    },
+
+    {
+      id: "skills",
+      label: "SKILLS",
+      icon: "cpu",
+      type: "skills",
+      content: {
+        headline: "Skills & Tools",
+        groups: [
+          { title: "Languages",           chips: ["Python", "SQL", "JavaScript", "R (basics)", "C / C++"] },
+          { title: "ML & Statistics",     chips: ["Probabilistic modelling", "Empirical-Bayes shrinkage", "Hierarchical modelling", "Monte Carlo simulation", "Calibration & validation", "Regression", "KNN / Random Forest", "K-Means", "Prophet", "NLP (BERT)", "ANOVA / MANOVA", "Chi-Square / t-test", "Mann-Whitney U"] },
+          { title: "Data Engineering",    chips: ["ETL pipelines", "pandas", "NumPy", "scikit-learn", "JSON parsing", "Feature engineering", "Data cleaning & validation", "Multi-source reconciliation"] },
+          { title: "Backend & Frameworks",chips: ["FastAPI", "REST APIs", "Stateless architecture", "Pydantic", "pytest", "Streamlit", "Ollama (local LLM)"] },
+          { title: "Frontend & DevOps",   chips: ["React", "Vite", "Reactive UI", "Git / GitHub", "Vercel", "Render", "CORS"] },
+          { title: "BI & Visualization",  chips: ["Power BI (DAX, Power Query, RLS)", "Tableau", "Advanced Excel (VBA)", "SPSS"] },
+          { title: "Business & Analysis", chips: ["Requirement gathering (BRD/FRD)", "Stakeholder communication", "KPI design", "Process analysis", "Decision support", "Gap analysis"] }
+        ]
+      }
+    },
+
+    {
+      id: "resume",
+      label: "RESUME",
+      icon: "file",
+      type: "resume",
+      content: {
+        headline: "Resume",
+        paragraphs: [
+          "I keep a few role-focused versions depending on what you're hiring for. Grab whichever fits — or reach out and I'll send the right one with references.",
+          "B.Tech in Artificial Intelligence Engineering (Robotics), Amrita Vishwa Vidyapeetham · MBA in Information Systems & Analytics, GITAM University."
+        ],
+        // Drop these PDFs into assets/resumes/ (see the README there for the exact names).
+        downloads: [
+          { label: "AI / ML & Engineering", url: "assets/resumes/Vireen_AI_ML_Resume.pdf" },
+          { label: "Data Analyst",          url: "assets/resumes/Vireen_Data_Analyst_Resume.pdf" },
+          { label: "Business Analyst",       url: "assets/resumes/Vireen_Business_Analyst_Resume.pdf" },
+          { label: "General",               url: "assets/resumes/Vireen_General_Resume.pdf" }
+        ],
+        certifications: [
+          "Microsoft PL-300: Power BI Data Analyst (in progress)",
+          "Microsoft Power BI Data Analyst — Coursera"
+        ]
+      }
+    },
+
+    {
+      id: "contact",
+      label: "CONTACT",
+      icon: "mail",
+      type: "contact",
+      content: {
+        headline: "Get in touch",
+        paragraphs: ["Best reached by email — I usually reply within a day. Open to full-time roles across data, analytics, ML, and business-analyst work."],
+        channels: [
+          { type: "EMAIL",    value: "vchowdaryv02@gmail.com",                url: "mailto:vchowdaryv02@gmail.com" },
+          { type: "LINKEDIN", value: "linkedin.com/in/vireenchowdaryvesangi", url: "https://www.linkedin.com/in/vireenchowdaryvesangi" },
+          { type: "GITHUB",   value: "github.com/Vireen555",                  url: "https://github.com/Vireen555" },
+          { type: "PHONE",    value: "+91 95155 87313",                       url: "tel:+919515587313" },
+          { type: "LOCATION", value: "Visakhapatnam, India",                  url: "https://maps.google.com/?q=Visakhapatnam,India" }
+        ]
+      }
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // EXAMPLE: how to add a brand-new section like "Writings"
+    // (Just uncomment and customize. The crate appears automatically.)
+    // ──────────────────────────────────────────────────────────
+    /*
+    ,{
+      id: "writings",
+      label: "WRITINGS",
+      icon: "file",
+      type: "custom",
+      content: {
+        headline: "Essays & Notes",
+        // raw HTML — go wild
+        html: `
+          <p>Latest writing:</p>
+          <ul style="margin: 12px 0 20px 20px; color: var(--ink-soft); line-height: 2;">
+            <li><a href="#">Why robots are still expensive — May 2026</a></li>
+            <li><a href="#">Notes on imitation learning at scale</a></li>
+          </ul>
+        `
+      }
+    }
+    */
+  ]
+};
+
+// ============================================================
+// ICONS  — add new ones here, reference them by key in CONFIG
+// ============================================================
+const ICONS = {
+  user:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+  box:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
+  briefcase:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>',
+  cpu:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>',
+  file:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>',
+  mail:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
+  cap:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1 2.5 3 6 3s6-2 6-3v-5"/><path d="M22 10v6"/></svg>'
+};
+
+// ============================================================
+// HERO + BRAND wiring
+// ============================================================
+// Only override HUD brand if CONFIG.brand is provided
+if (CONFIG.brand) document.getElementById('hud-brand').textContent = CONFIG.brand;
+document.getElementById('hero-eyebrow').textContent = CONFIG.eyebrow;
+document.getElementById('hero-name').innerHTML = `Hi, I'm <span class="accent">${CONFIG.name}</span>`;
+document.getElementById('hero-bio').textContent = CONFIG.bio;
+
+// ============================================================
+// RENDER CRATES from CONFIG
+// ============================================================
+const cratesEl = document.getElementById('crates');
+CONFIG.sections.forEach((s, i) => {
+  const c = document.createElement('div');
+  c.className = 'crate';
+  c.dataset.id = s.id;
+  c.dataset.index = i;
+  c.innerHTML = `
+    <span class="id">PKG-${String(i+1).padStart(3,'0')}</span>
+    <div class="icon">${ICONS[s.icon] || ICONS.box}</div>
+    <span class="label">${s.label}</span>
+  `;
+  c.addEventListener('click', () => pickCrate(c, s));
+  cratesEl.appendChild(c);
+});
+
+// ============================================================
+// ROBOTIC ARM CHOREOGRAPHY
+// We compute target joint angles for each crate so the arm reaches
+// roughly toward its position on the floor. Simple but believable.
+// ============================================================
+const shoulder = document.getElementById('shoulder');
+const elbow    = document.getElementById('elbow');
+const wrist    = document.getElementById('wrist');
+const arm      = document.getElementById('arm');
+const toast    = document.getElementById('toast');
+const statusText = document.getElementById('status-text');
+const opCountEl = document.getElementById('op-count');
+let opCount = 0;
+let busy = false;
+
+// Arm segment lengths (in pixels, matching CSS)
+const UPPER_ARM_LENGTH = 170;
+const FOREARM_LENGTH = 150;
+
+function setStatus(t) { statusText.textContent = t; }
+function showToast(t) {
+  document.getElementById('toast-text').textContent = t;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 1800);
+}
+
+// 2D Inverse Kinematics solver for a 2-link arm
+// Simplified approach: directly compute angles based on target position
+function solveIK(tx, ty, upperLen = UPPER_ARM_LENGTH, foreLen = FOREARM_LENGTH) {
+  // Clamped distance to reachable area
+  const dist = Math.hypot(tx, ty);
+  const maxReach = upperLen + foreLen;
+  const minReach = Math.abs(upperLen - foreLen);
+  
+  let targetDist = Math.max(minReach + 10, Math.min(maxReach - 10, dist));
+  
+  // If target is beyond reach, scale it down
+  if (dist > maxReach) {
+    tx = (tx / dist) * targetDist;
+    ty = (ty / dist) * targetDist;
+  } else if (dist < minReach) {
+    tx = (tx / dist) * (minReach + 10);
+    ty = (ty / dist) * (minReach + 10);
+  }
+  
+  // Law of cosines for elbow angle
+  const distSq = tx * tx + ty * ty;
+  const cosElbow = (upperLen * upperLen + foreLen * foreLen - distSq) / (2 * upperLen * foreLen);
+  const clampedCosElbow = Math.max(-1, Math.min(1, cosElbow));
+  const elbowAngleRad = Math.acos(clampedCosElbow);
+  const elbowAngle = (180 - (elbowAngleRad * 180 / Math.PI)) * -1;
+  
+  // Shoulder angle using atan2
+  const targetAngleRad = Math.atan2(ty, tx);
+  const elbowContributionRad = Math.atan2(foreLen * Math.sin(elbowAngleRad), 
+                                           upperLen + foreLen * Math.cos(elbowAngleRad));
+  let shoulderAngle = (targetAngleRad - elbowContributionRad) * (180 / Math.PI);
+  
+  // Clamp shoulder angle to reasonable range
+  shoulderAngle = Math.max(-70, Math.min(70, shoulderAngle));
+  
+  // More flexible elbow range for better joint movement
+  return { shoulderAngle, elbowAngle: Math.max(-45, Math.min(5, elbowAngle)) };
+}
+
+function computeAngles(crateEl) {
+  // This function is now DEPRECATED - we use solveIK() instead for consistency
+  // Keeping it for reference but it's not called anymore
+  const armBase = document.querySelector('.arm-mount').getBoundingClientRect();
+  const crate   = crateEl.getBoundingClientRect();
+  const baseX = armBase.left + armBase.width/2;
+  const baseY = armBase.top  + 20;
+  const tx = crate.left + crate.width/2;
+  const ty = crate.top + 10;
+  const dx = tx - baseX;
+  const dy = ty - baseY;
+
+  return solveIK(dx, dy);
+}
+
+async function pickCrate(crateEl, section) {
+  if (busy) return;
+  busy = true;
+  opCount++;
+  opCountEl.textContent = String(opCount).padStart(3,'0');
+
+  // Disable cursor-tracking mode so the smooth 1.1s CSS transitions take over
+  arm.classList.remove('tracking');
+  trackingActive = false;
+
+  setStatus(`PICK :: ${section.label}`);
+  showToast(`PICKING ${section.label}`);
+
+  // Compute target position for the crate using IK
+  const armBase = document.querySelector('.arm-mount').getBoundingClientRect();
+  const crate   = crateEl.getBoundingClientRect();
+  const baseX = armBase.left + armBase.width/2;
+  const baseY = armBase.top  + 20;
+  const tx_raw = crate.left + crate.width/2;
+  const ty_raw = crate.top + 10;
+  const dx = tx_raw - baseX;
+  const dy = ty_raw - baseY;
+
+  const { shoulderAngle, elbowAngle } = solveIK(dx, dy);
+
+  // 1. Swing arm toward crate
+  shoulder.style.transform = `rotate(${shoulderAngle}deg)`;
+  elbow.style.transform    = `translateX(-50%) rotate(${elbowAngle}deg)`;
+  wrist.style.transform    = `translateX(-50%) rotate(${-shoulderAngle * 0.5}deg)`;
+  await wait(1100);
+
+  // 2. Close gripper
+  arm.classList.add('gripping');
+  await wait(400);
+
+  // 3. Crate "lifts" — hide crate, show held box
+  arm.classList.add('holding');
+  crateEl.classList.add('picked');
+  await wait(300);
+
+  // 4. Retract toward center
+  shoulder.style.transform = `rotate(0deg)`;
+  elbow.style.transform    = `translateX(-50%) rotate(-30deg)`;
+  wrist.style.transform    = `translateX(-50%) rotate(0deg)`;
+  await wait(900);
+
+  // 5. Open the panel
+  setStatus(`OPEN :: ${section.label}`);
+  openPanel(section, () => {
+    // when panel closes, reset arm
+    crateEl.classList.remove('picked');
+    arm.classList.remove('holding');
+    arm.classList.remove('gripping');
+    shoulder.style.transform = `rotate(${REST_SHOULDER}deg)`;
+    elbow.style.transform    = `translateX(-50%) rotate(${REST_ELBOW}deg)`;
+    wrist.style.transform    = `translateX(-50%) rotate(0deg)`;
+    // sync lerp state so cursor-tracking resumes from rest pose
+    currentShoulder = REST_SHOULDER;
+    currentElbow    = REST_ELBOW;
+    targetShoulder  = REST_SHOULDER;
+    targetElbow     = REST_ELBOW;
+    setStatus('AWAITING_INPUT');
+    busy = false;
+  });
+}
+
+function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ============================================================
+// PANEL CONTENT RENDERING
+// ============================================================
+const overlay = document.getElementById('panel-overlay');
+const panelBody = document.getElementById('panel-body');
+const panelCrumb = document.getElementById('panel-crumb');
+const panelClose = document.getElementById('panel-close');
+const panelBack  = document.getElementById('panel-back');
+
+let panelCloseCallback = null;
+
+function openPanel(section, onClose) {
+  panelCrumb.textContent = section.label;
+  panelBody.innerHTML = `<div class="panel-inner">${renderSection(section)}</div>`;
+  panelBody.scrollTop = 0;
+  overlay.classList.add('open');
+  panelCloseCallback = onClose;
+}
+
+function closePanel() {
+  overlay.classList.remove('open');
+  if (panelCloseCallback) {
+    const cb = panelCloseCallback;
+    panelCloseCallback = null;
+    setTimeout(cb, 350);  // wait for fade-out
+  }
+}
+
+panelClose.addEventListener('click', closePanel);
+panelBack.addEventListener('click', closePanel);
+overlay.addEventListener('click', (e) => { if (e.target === overlay) closePanel(); });
+
+// ---- Lightbox ----
+const lightbox = document.getElementById('lightbox');
+const lightboxImg = document.getElementById('lightbox-img');
+function openLightbox(src) {
+  lightboxImg.src = src;
+  lightbox.classList.add('open');
+}
+function closeLightbox() {
+  lightbox.classList.remove('open');
+  lightboxImg.src = '';
+}
+lightbox.addEventListener('click', closeLightbox);
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (lightbox.classList.contains('open')) { closeLightbox(); return; }
+  if (overlay.classList.contains('open')) closePanel();
+});
+
+function renderSection(s) {
+  const c = s.content;
+  const head = `<h2>${c.headline}</h2><div class="subtitle">SECTOR_A // ${s.label}</div>`;
+
+  switch (s.type) {
+    case "about": {
+      const photo = c.image
+        ? `<figure class="about-photo"><img src="${c.image}" alt="${CONFIG.name}" loading="lazy" onerror="this.closest('.about-photo').remove()"><figcaption>${CONFIG.name}</figcaption></figure>`
+        : '';
+      return head + `<div class="about-body">${photo}${(c.paragraphs || []).map(p => `<p>${p}</p>`).join('')}</div>`;
+    }
+
+    case "projects":
+      return renderProjectsChooser(s);
+
+    case "experience":
+      return head + `<div class="timeline">` +
+        (c.items || []).map(renderExperience).join('') +
+        `</div>`;
+
+    case "education": {
+      const schools = (c.schools || []).map(s => `
+        <div class="timeline-item">
+          <div class="when">${s.when}</div>
+          <h3>${s.degree}</h3>
+          <div class="org">${s.org}</div>
+          ${(s.notes && s.notes.length) ? `<ul style="color: var(--ink-soft); line-height: 1.7; margin-left: 20px; font-size: 14px;">${s.notes.map(n => `<li>${n}</li>`).join('')}</ul>` : ''}
+        </div>
+      `).join('');
+      const block = (title, items) => (items && items.length)
+        ? `<div class="skill-group" style="margin-top:30px"><h4>${title}</h4><ul class="cert-list">${items.map(x => `<li>${x}</li>`).join('')}</ul></div>`
+        : '';
+      return head +
+        `<div class="timeline">${schools}</div>` +
+        block('Achievements', c.achievements) +
+        block('Clubs & Co-curriculars', c.activities);
+    }
+
+    case "skills":
+      return head + (c.groups || []).map(g => `
+        <div class="skill-group">
+          <h4>${g.title}</h4>
+          <div class="skill-chips">${(g.chips || []).map(x => `<span class="chip">${x}</span>`).join('')}</div>
+        </div>
+      `).join('');
+
+    case "resume": {
+      const paras = (c.paragraphs || []).map(p => `<p>${p}</p>`).join('');
+      const downloads = (c.downloads && c.downloads.length)
+        ? `<div class="resume-downloads">${c.downloads.map(d => `<a class="btn" href="${d.url}" download>${d.label} ↓</a>`).join('')}</div>`
+        : (c.downloadUrl ? `<a class="btn" href="${c.downloadUrl}" download>${c.downloadLabel || 'Download'} ↓</a>` : '');
+      const certs = (c.certifications && c.certifications.length)
+        ? `<div class="skill-group" style="margin-top:30px"><h4>Certifications</h4><ul class="cert-list">${c.certifications.map(x => `<li>${x}</li>`).join('')}</ul></div>`
+        : '';
+      return head + paras + downloads + certs;
+    }
+
+    case "contact":
+      return head +
+        (c.paragraphs || []).map(p => `<p>${p}</p>`).join('') +
+        `<div class="contact-list">` +
+        (c.channels || []).map(ch => `
+          <a class="contact-row" href="${ch.url}" ${ch.url.startsWith('http') ? 'target="_blank" rel="noopener"' : ''}>
+            <span class="lbl">${ch.type}</span>
+            <span>${ch.value}</span>
+          </a>
+        `).join('') +
+        `</div>`;
+
+    case "custom":
+      return head + (c.html || '');
+
+    default:
+      return head + `<p>Section type "${s.type}" not recognized.</p>`;
+  }
+}
+
+// Projects open as a CHOOSER of tiles; clicking a tile opens that project's
+// case study in-place (with a back button). State lives in these two globals.
+let PROJECT_INDEX = {};
+let PROJECTS_SECTION = null;
+
+function renderProjectsChooser(s) {
+  PROJECTS_SECTION = s;
+  PROJECT_INDEX = {};
+  const c = s.content;
+  const head = `<h2>${c.headline}</h2><div class="subtitle">SECTOR_A // ${s.label}</div>`;
+  const groups = (c.groups && c.groups.length) ? c.groups : [{ title: "", items: c.items || [] }];
+  const html = groups
+    .filter(g => (g.items || []).length)
+    .map((g, gi) => {
+      const tiles = g.items.map((p, pi) => {
+        const id = `pj_${gi}_${pi}`;
+        PROJECT_INDEX[id] = p;
+        return renderProjectTile(p, id);
+      }).join('');
+      return `
+        <div class="project-group">
+          <div class="group-title">${g.title}<span class="group-count">${g.items.length} ${g.items.length === 1 ? 'project' : 'projects'}</span></div>
+          <div class="tile-grid">${tiles}</div>
+        </div>`;
+    }).join('');
+  return `${head}<p class="chooser-hint">Pick a project to open its full case study.</p>${html}`;
+}
+
+function renderProjectTile(p, id) {
+  const thumb = p.thumb || p.heroImage || p.heroGif || (p.gallery && p.gallery[0] && p.gallery[0].src) || '';
+  const media = thumb
+    ? `<span class="tile-thumb"><img src="${thumb}" alt="" loading="lazy" onerror="this.closest('.tile-thumb').remove()"></span>`
+    : '';
+  return `
+    <button class="project-tile" onclick="openProjectDetail('${id}')">
+      ${media}
+      <span class="tile-body">
+        <span class="tag">${p.tag}</span>
+        <span class="tile-title">${p.title}</span>
+        <span class="tile-desc">${p.description || ''}</span>
+        <span class="tile-cta">View project →</span>
+      </span>
+    </button>`;
+}
+
+function openProjectDetail(id) {
+  const p = PROJECT_INDEX[id];
+  const inner = document.querySelector('.panel-inner');
+  if (!p || !inner) return;
+  inner.innerHTML = `<button class="back-btn" onclick="backToProjects()">← All projects</button>` + renderCaseStudy(p);
+  panelBody.scrollTop = 0;
+}
+
+function backToProjects() {
+  const inner = document.querySelector('.panel-inner');
+  if (!inner || !PROJECTS_SECTION) return;
+  inner.innerHTML = renderProjectsChooser(PROJECTS_SECTION);
+  panelBody.scrollTop = 0;
+}
+
+function projectLinks(p) {
+  return (p.links || [])
+    .map(l => `<a class="${l.primary ? 'btn' : 'cs-link'}" href="${l.url}" ${l.url.startsWith('http') || l.url.startsWith('mailto') ? 'target="_blank" rel="noopener"' : ''}>${l.label}${l.primary ? '' : ' →'}</a>`)
+    .join('');
+}
+
+// Hero media at the top of a case study: muted-autoplay video, or a hero image/GIF.
+function renderHero(p) {
+  if (p.heroVideo && p.heroVideo.youtube) {
+    const v = p.heroVideo.youtube;
+    // YouTube embeds fail from the file:// protocol (Error 153 — no HTTP origin).
+    // Locally we show a clickable poster instead; when hosted we autoplay inline.
+    const isFile = (typeof location !== 'undefined' && location.protocol === 'file:');
+    if (isFile) {
+      return `
+        <a class="cs-hero cs-hero-video cs-hero-poster" href="https://youtu.be/${v}" target="_blank" rel="noopener"
+           style="background-image:url('https://img.youtube.com/vi/${v}/hqdefault.jpg')">
+          <span class="cs-play" aria-label="Play walkthrough">▶</span>
+        </a>
+        <div class="cs-hero-hint">▶ Opens the 2-min walkthrough on YouTube. It autoplays inline once the site is hosted — YouTube blocks embeds on local <code>file://</code> previews.</div>`;
+    }
+    // autoplay REQUIRES mute; the player controls let visitors unmute.
+    const src = `https://www.youtube-nocookie.com/embed/${v}?autoplay=1&mute=1&loop=1&playlist=${v}&controls=1&rel=0&modestbranding=1&playsinline=1`;
+    return `
+      <div class="cs-hero cs-hero-video">
+        <iframe src="${src}" title="Demo walkthrough" loading="lazy"
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                allowfullscreen></iframe>
+      </div>
+      <div class="cs-hero-hint">▶ Plays muted — tap the speaker icon in the player for sound.</div>`;
+  }
+  const img = p.heroGif || p.heroImage;
+  if (img) {
+    return `<div class="cs-hero"><img src="${img}" alt="${(p.title || '').replace(/"/g, '&quot;')}" loading="lazy" onclick="openLightbox(this.src)" onerror="this.closest('.cs-hero').remove()"></div>`;
+  }
+  return '';
+}
+
+function renderBlock(b) {
+  if (b.lead)    return `<p class="cs-lead">${b.lead}</p>`;
+  if (b.h)       return `<h4 class="cs-h">${b.h}</h4>`;
+  if (b.p)       return `<p>${b.p}</p>`;
+  if (b.bullets) return `<ul class="cs-highlights">${b.bullets.map(x => `<li>${x}</li>`).join('')}</ul>`;
+  if (b.note)    return `<div class="cs-note">${b.note}</div>`;
+  if (b.image)   return `
+    <figure class="cs-figure">
+      <img src="${b.image}" alt="${(b.caption || '').replace(/"/g, '&quot;')}" loading="lazy"
+           onclick="openLightbox(this.src)" onerror="this.closest('.cs-figure').remove()">
+      ${b.caption ? `<figcaption>${b.caption}</figcaption>` : ''}
+    </figure>`;
+  return '';
+}
+
+function renderStack(stack) {
+  if (!stack || !stack.length) return '';
+  return `
+    <div class="cs-stack">
+      <h4 class="cs-h">Tech stack</h4>
+      <div class="skill-chips">${stack.map(t => `<span class="chip">${t}</span>`).join('')}</div>
+    </div>`;
+}
+
+// Full case study: hero → head → CTAs → body (blocks OR summary/highlights) → gallery → stack.
+function renderCaseStudy(p) {
+  const bodyHtml = (p.body && p.body.length)
+    ? p.body.map(renderBlock).join('')
+    : ((p.summary || []).map(x => `<p>${x}</p>`).join('') +
+       ((p.highlights || []).length
+          ? `<ul class="cs-highlights">${p.highlights.map(h => `<li>${h}</li>`).join('')}</ul>` : ''));
+  const links = projectLinks(p);
+  return `
+    <article class="case-study">
+      ${renderHero(p)}
+      <div class="cs-head">
+        <span class="tag">${p.tag}</span>
+        <h3>${p.title}</h3>
+        ${p.description ? `<div class="cs-sub">${p.description}</div>` : ''}
+      </div>
+      ${links ? `<div class="cs-links">${links}</div>` : ''}
+      <div class="cs-body">${bodyHtml}</div>
+      ${renderGallery(p.gallery)}
+      ${renderStack(p.stack)}
+    </article>`;
+}
+
+// Image gallery. Missing files remove themselves so nothing looks broken.
+function renderGallery(shots) {
+  if (!shots || !shots.length) return '';
+  return `<div class="gallery">` + shots.map(s => `
+    <figure class="shot">
+      <img src="${s.src}" alt="${(s.caption || '').replace(/"/g, '&quot;')}" loading="lazy"
+           onclick="openLightbox(this.src)"
+           onerror="this.closest('.shot').remove()">
+      ${s.caption ? `<figcaption>${s.caption}</figcaption>` : ''}
+    </figure>
+  `).join('') + `</div>`;
+}
+
+function renderProject(p) {
+  let media = '';
+  if (p.youtube) {
+    media = `<iframe src="https://www.youtube.com/embed/${p.youtube}" frameborder="0" allowfullscreen></iframe>`;
+  } else if (p.video) {
+    media = `<video src="${p.video}" controls></video>`;
+  } else if (p.cover) {
+    media = `<img src="${p.cover}" alt="${(p.title || '').replace(/"/g, '&quot;')}" loading="lazy" style="width:100%;border-radius:6px;margin-bottom:12px;border:1px solid var(--line);cursor:zoom-in" onclick="openLightbox(this.src)" onerror="this.remove()">`;
+  }
+  const links = (p.links || []).map(l => `<a href="${l.url}" ${l.url.startsWith('http') || l.url.startsWith('mailto') ? 'target="_blank" rel="noopener"' : ''}>${l.label} →</a>`).join('');
+  return `
+    <div class="project-card">
+      ${media}
+      <span class="tag">${p.tag}</span>
+      <h3>${p.title}</h3>
+      <p>${p.description}</p>
+      <div class="links">${links}</div>
+    </div>
+  `;
+}
+
+function renderExperience(e) {
+  const bullets = (e.bullets || []).map(b => `<li>${b}</li>`).join('');
+  return `
+    <div class="timeline-item">
+      <div class="when">${e.when}</div>
+      <h3>${e.role}</h3>
+      <div class="org">${e.org}</div>
+      ${bullets ? `<ul style="color: var(--ink-soft); line-height: 1.7; margin-left: 20px; font-size: 14px;">${bullets}</ul>` : ''}
+    </div>
+  `;
+}
+
+// ============================================================
+// HUD CLOCK + subtle ambient motion + CURSOR TRACKING
+// ============================================================
+function tick() {
+  const d = new Date();
+  const t = [d.getHours(), d.getMinutes(), d.getSeconds()]
+    .map(n => String(n).padStart(2,'0')).join(':');
+  document.getElementById('clock').textContent = t;
+}
+setInterval(tick, 1000); tick();
+
+// ============================================================
+// CURSOR / TOUCH TRACKING
+//
+// Why the previous version lagged 7-8s:
+//   - CSS had `transition: transform 1.1s` on shoulder/elbow/wrist
+//   - JS set the transform every 30ms, restarting that 1.1s tween each time
+//   - Each tween chased a moving target → huge cumulative lag
+//
+// Fix:
+//   - During tracking, add class `tracking` to the arm → CSS disables transitions
+//   - JS does the smoothing itself with a lerp factor tuned for ~1-2s catch-up
+//   - Runs on requestAnimationFrame (60fps) for buttery motion
+//   - Pause tracking when a crate is being picked, panel is open, or user is hovering a crate
+// ============================================================
+
+// Smoothing factor — higher = arm catches up faster.
+// 0.04 ≈ 1.5s to reach target, 0.06 ≈ 1s, 0.10 ≈ 0.5s.
+// Tweak this single number to taste.
+const FOLLOW_SMOOTHING = 0.05;
+
+// Default rest pose when cursor leaves the window
+const REST_SHOULDER = 8;
+const REST_ELBOW    = -20;
+
+let targetShoulder = REST_SHOULDER;
+let targetElbow    = REST_ELBOW;
+let currentShoulder = REST_SHOULDER;
+let currentElbow    = REST_ELBOW;
+let trackingActive  = false;
+
+// Throttle the IK recompute — the lerp runs every frame, but we don't need
+// to recompute the target from mouse position more than ~20x/sec.
+let lastIKCompute = 0;
+const IK_INTERVAL_MS = 50;
+
+function updateTargetFromPointer(clientX, clientY) {
+  const armBase = document.querySelector('.arm-mount').getBoundingClientRect();
+  const baseX = armBase.left + armBase.width / 2;
+  const baseY = armBase.top + 20;
+  const tx = clientX - baseX;
+  const ty = clientY - baseY;
+  const { shoulderAngle, elbowAngle } = solveIK(tx, ty);
+  targetShoulder = shoulderAngle;
+  targetElbow    = elbowAngle;
+}
+
+// Desktop: track cursor
+window.addEventListener('mousemove', (e) => {
+  const now = performance.now();
+  if (now - lastIKCompute < IK_INTERVAL_MS) return;
+  lastIKCompute = now;
+  updateTargetFromPointer(e.clientX, e.clientY);
+});
+
+// Mobile: track touch drag (so the arm follows a finger swipe on the scene)
+window.addEventListener('touchmove', (e) => {
+  if (!e.touches || !e.touches[0]) return;
+  const now = performance.now();
+  if (now - lastIKCompute < IK_INTERVAL_MS) return;
+  lastIKCompute = now;
+  updateTargetFromPointer(e.touches[0].clientX, e.touches[0].clientY);
+}, { passive: true });
+
+// When mouse leaves the window, ease back to rest pose
+window.addEventListener('mouseleave', () => {
+  targetShoulder = REST_SHOULDER;
+  targetElbow    = REST_ELBOW;
+});
+
+// rAF loop — runs always, lerps current toward target every frame
+function animateArm() {
+  if (!busy && !overlay.classList.contains('open')) {
+    // Engage tracking mode (disables CSS transitions in this state)
+    if (!trackingActive) {
+      arm.classList.add('tracking');
+      trackingActive = true;
+    }
+
+    // Lerp current → target
+    currentShoulder += (targetShoulder - currentShoulder) * FOLLOW_SMOOTHING;
+    currentElbow    += (targetElbow    - currentElbow)    * FOLLOW_SMOOTHING;
+
+    shoulder.style.transform = `rotate(${currentShoulder.toFixed(2)}deg)`;
+    elbow.style.transform    = `translateX(-50%) rotate(${currentElbow.toFixed(2)}deg)`;
+    wrist.style.transform    = `translateX(-50%) rotate(${(-currentShoulder * 0.3).toFixed(2)}deg)`;
+  } else {
+    // Crate pick or panel open — let the smooth 1.1s CSS transitions take over.
+    // Also sync our "current" values with whatever the pick animation set,
+    // so when tracking resumes there's no jump.
+    if (trackingActive) {
+      arm.classList.remove('tracking');
+      trackingActive = false;
+    }
+  }
+  requestAnimationFrame(animateArm);
+}
+requestAnimationFrame(animateArm);
+</script>
+
+</body>
+</html>

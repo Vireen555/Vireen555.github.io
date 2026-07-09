@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Portfolio — Robotics & AI</title>
+
+<!-- ============================================================
+     FONTS  (swap freely)
+============================================================ -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   DESIGN TOKENS  — change colors / sizes here once, applies everywhere
+============================================================ */
+:root {
+  --bg:            #f4f6f8;    /* warehouse floor */
+  --bg-grid:      rgba(20, 40, 70, 0.06);
+  --panel:         #ffffff;
+  --ink:           #0e1726;    /* primary text */
+  --ink-soft:      #4b5563;
+  --ink-faint:     #94a3b8;
+  --line:          #e2e8f0;
+  --accent:        #1e6fff;    /* electric blue */
+  --accent-soft:   #e8f0ff;
+  --signal:        #00c389;    /* status green */
+  --warn:          #ffb020;
+  --steel:         #c0c8d2;    /* arm body */
+  --steel-dark:    #8b95a3;
+  --steel-deep:    #5a6472;
+  --shadow:        0 10px 40px -10px rgba(20, 40, 70, 0.18);
+
+  --font-display:  'Sora', system-ui, sans-serif;
+  --font-mono:     'JetBrains Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: var(--font-display);
+  color: var(--ink);
+  background: var(--bg);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* subtle grid floor */
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+  mask-image: radial-gradient(ellipse at center, #000 40%, transparent 90%);
+}
+
+/* ============================================================
+   HUD — top + bottom status bars (decorative)
+============================================================ */
+.hud {
+  position: fixed;
+  left: 0; right: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  pointer-events: none;
+}
+.hud.top    { top: 0; border-bottom: 1px solid var(--line); background: rgba(244,246,248,0.7); backdrop-filter: blur(8px); }
+.hud.bottom { bottom: 0; border-top: 1px solid var(--line); background: rgba(244,246,248,0.7); backdrop-filter: blur(8px); }
+.hud .group { display: flex; gap: 22px; align-items: center; }
+.hud .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 0 3px rgba(0,195,137,0.18);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(0,195,137,0.18); }
+  50%      { box-shadow: 0 0 0 6px rgba(0,195,137,0.05); }
+}
+.hud .brand { color: var(--ink); font-weight: 700; letter-spacing: 0.12em; }
+
+/* ============================================================
+   STAGE  (the warehouse scene)
+============================================================ */
+.stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.scene {
+  position: relative;
+  width: min(1100px, 95vw);
+  height: min(680px, 80vh);
+  margin-top: 20px;
+}
+
+/* HERO — name + tagline tucked top-left of scene */
+.hero {
+  position: absolute;
+  top: -4px; left: 0;
+  max-width: 520px;
+  z-index: 4;
+}
+.hero .eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0em;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin-bottom: 35px;
+  display: flex; align-items: center; gap: 10px;
+}
+.hero .eyebrow::before {
+  content: ""; width: 28px; height: 1px; background: var(--accent);
+}
+.hero h1 {
+  font-size: clamp(36px, 5vw, 56px);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin-bottom: 14px;
+}
+.hero h1 .accent { color: var(--accent); }
+.hero p {
+  font-size: 15px;
+  color: var(--ink-soft);
+  line-height: 1.6;
+  max-width: 440px;
+}
+.hero .instr {
+  margin-top: 18px;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.hero .instr svg { width: 14px; height: 14px; }
+
+/* ============================================================
+   ROBOTIC ARM
+   Built with nested transforms — each "joint" is a div that
+   rotates its children. Inverse-kinematics-ish hand animation
+   is done with CSS keyframes triggered by JS.
+============================================================ */
+.arm-mount {
+  position: absolute;
+  /* base sits at this point in the scene */
+  left: 50%;
+  top: 8%;
+  width: 0; height: 0;
+  z-index: 3;
+  transform: translateX(-50%);
+}
+
+/* ceiling rail the arm is mounted to */
+.rail {
+  position: absolute;
+  top: 4%;
+  left: 8%;
+  right: 8%;
+  height: 14px;
+  background: linear-gradient(180deg, #d8dee6 0%, #aab3bf 50%, #6e7785 100%);
+  border-radius: 3px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+  z-index: 2;
+}
+.rail::before, .rail::after {
+  content: "";
+  position: absolute;
+  top: -8px;
+  width: 18px; height: 26px;
+  background: var(--steel-deep);
+  border-radius: 2px;
+}
+.rail::before { left: -4px; }
+.rail::after  { right: -4px; }
+
+/* base plate (where arm meets ceiling) */
+.base {
+  position: absolute;
+  top: -2px;
+  left: -45px;
+  width: 90px; height: 28px;
+  background: linear-gradient(180deg, var(--steel) 0%, var(--steel-dark) 100%);
+  border-radius: 4px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
+.base::after {
+  content: "";
+  position: absolute;
+  left: 50%; bottom: -6px;
+  transform: translateX(-50%);
+  width: 36px; height: 12px;
+  background: var(--steel-deep);
+  border-radius: 0 0 6px 6px;
+}
+
+/* SEGMENT 1 — shoulder rotor + upper arm */
+.shoulder {
+  position: absolute;
+  left: 0; top: 18px;
+  transform-origin: 0% 0%;
+  transition: transform 1.1s cubic-bezier(.6,.05,.25,1);
+  /* default rest position */
+  transform: rotate(8deg);
+}
+.upper-arm {
+  position: absolute;
+  left: -18px;          /* shift so rotor sits at joint */
+  top: 0;
+  width: 36px;
+  height: 170px;
+  background: linear-gradient(90deg, #d6dde5 0%, #b4bdc9 50%, #8c95a3 100%);
+  border-radius: 6px;
+  box-shadow: inset -3px 0 0 rgba(0,0,0,0.08);
+}
+.upper-arm::before { /* rotor at top */
+  content: "";
+  position: absolute;
+  top: -14px; left: 50%;
+  transform: translateX(-50%);
+  width: 50px; height: 50px;
+  background: radial-gradient(circle at 35% 35%, #e7ecf2, #8b95a3 70%);
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.18), inset 0 0 0 4px var(--panel);
+}
+.upper-arm::after { /* center bolt detail */
+  content: "";
+  position: absolute;
+  top: 4px; left: 50%;
+  transform: translateX(-50%);
+  width: 14px; height: 14px;
+  background: var(--steel-deep);
+  border-radius: 50%;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.4);
+}
+
+/* SEGMENT 2 — elbow + forearm */
+.elbow {
+  position: absolute;
+  left: 50%;
+  top: 170px;            /* end of upper arm */
+  transform-origin: 0% 0%;
+  transition: transform 1.1s cubic-bezier(.6,.05,.25,1);
+  transform: translateX(-50%) rotate(-20deg);
+}
+.forearm {
+  position: absolute;
+  left: -16px;
+  top: 0;
+  width: 32px;
+  height: 150px;
+  background: linear-gradient(90deg, #d6dde5 0%, #b4bdc9 50%, #8c95a3 100%);
+  border-radius: 5px;
+}
+.forearm::before { /* rotor at top */
+  content: "";
+  position: absolute;
+  top: -12px; left: 50%;
+  transform: translateX(-50%);
+  width: 42px; height: 42px;
+  background: radial-gradient(circle at 35% 35%, #e7ecf2, #8b95a3 70%);
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.18), inset 0 0 0 3px var(--panel);
+}
+.forearm::after { /* bolt */
+  content: "";
+  position: absolute;
+  top: 3px; left: 50%;
+  transform: translateX(-50%);
+  width: 12px; height: 12px;
+  background: var(--steel-deep);
+  border-radius: 50%;
+}
+
+/* SEGMENT 3 — wrist + gripper */
+.wrist {
+  position: absolute;
+  left: 50%;
+  top: 150px;
+  transform-origin: 0% 0%;
+  transition: transform 1.1s cubic-bezier(.6,.05,.25,1);
+  transform: translateX(-50%) rotate(0deg);
+}
+.gripper-housing {
+  position: absolute;
+  left: -22px;
+  top: 0;
+  width: 44px;
+  height: 36px;
+  background: linear-gradient(180deg, var(--steel) 0%, var(--steel-dark) 100%);
+  border-radius: 4px 4px 2px 2px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.18);
+}
+.gripper-housing::before {
+  content: "";
+  position: absolute;
+  top: 6px; left: 50%;
+  transform: translateX(-50%);
+  width: 8px; height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--accent);
+}
+
+/* gripper claws */
+.claw {
+  position: absolute;
+  top: 32px;
+  width: 8px;
+  height: 28px;
+  background: linear-gradient(180deg, var(--steel-dark), var(--steel-deep));
+  border-radius: 2px;
+  transition: transform 0.4s cubic-bezier(.6,.05,.25,1);
+}
+.claw.left  { left: -16px;  transform-origin: top right; transform: rotate(-12deg); }
+.claw.right { right: -16px; transform-origin: top left;  transform: rotate(12deg); }
+
+/* gripping state — claws close */
+.arm.gripping .claw.left  { transform: rotate(2deg);  }
+.arm.gripping .claw.right { transform: rotate(-2deg); }
+
+/* held box rides with the wrist */
+.held-box {
+  position: absolute;
+  top: 52px;
+  left: -32px;
+  width: 64px; height: 64px;
+  background: linear-gradient(135deg, #e6c285, #c89856);
+  border: 2px solid #8a6a3a;
+  border-radius: 3px;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.2s, transform 0.3s;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+.held-box::before {
+  content: "";
+  position: absolute;
+  top: 30%; left: 0; right: 0;
+  height: 2px;
+  background: #8a6a3a;
+}
+.arm.holding .held-box { opacity: 1; transform: scale(1); }
+
+/* cable / hose detail running along arm (purely decorative) */
+.cable {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  width: 4px;
+  height: 100%;
+  background: repeating-linear-gradient(
+    180deg,
+    #2a3340 0 6px,
+    #1a2230 6px 12px
+  );
+  border-radius: 2px;
+  transform: translateX(-50%);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ============================================================
+   CRATES  (the buttons)
+============================================================ */
+.crates {
+  position: absolute;
+  bottom: 4%;
+  left: 0; right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  z-index: 2;
+  flex-wrap: wrap;
+  padding: 0 20px;
+}
+
+.crate {
+  position: relative;
+  width: 130px;
+  height: 130px;
+  background: linear-gradient(145deg, #f0d29a 0%, #d5a868 50%, #b88547 100%);
+  border: 2px solid #8a6a3a;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 10px;
+  transition: transform 0.3s cubic-bezier(.6,.05,.25,1), box-shadow 0.3s, opacity 0.4s;
+  box-shadow:
+    0 4px 12px rgba(0,0,0,0.12),
+    inset 0 0 0 1px rgba(255,255,255,0.2);
+  font-family: var(--font-display);
+  user-select: none;
+}
+
+/* wood/box panel lines */
+.crate::before {
+  content: "";
+  position: absolute;
+  top: 30%; left: -2px; right: -2px;
+  height: 4px;
+  background: linear-gradient(180deg, #8a6a3a, #6a4f28);
+}
+.crate::after {
+  content: "";
+  position: absolute;
+  bottom: 30%; left: -2px; right: -2px;
+  height: 4px;
+  background: linear-gradient(180deg, #8a6a3a, #6a4f28);
+}
+
+.crate .icon {
+  position: absolute;
+  top: 14px; left: 50%;
+  transform: translateX(-50%);
+  width: 28px; height: 28px;
+  color: #5a3f1a;
+  opacity: 0.85;
+}
+.crate .label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #3d2a10;
+  background: rgba(255,255,255,0.55);
+  padding: 4px 8px;
+  border-radius: 2px;
+  border: 1px solid rgba(58,42,16,0.3);
+}
+.crate .id {
+  position: absolute;
+  top: 6px; right: 6px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: #5a3f1a;
+  opacity: 0.7;
+  letter-spacing: 0.1em;
+}
+
+.crate:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.18), inset 0 0 0 1px rgba(255,255,255,0.3);
+}
+
+/* crate being picked up — fades because the "held-box" overlay represents it */
+.crate.picked {
+  opacity: 0;
+  transform: translateY(-30px);
+  pointer-events: none;
+}
+
+/* ============================================================
+   PANEL  (opens after pick animation)
+============================================================ */
+.panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(14, 23, 38, 0.45);
+  backdrop-filter: blur(6px);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s;
+  padding: 80px 24px 80px;
+}
+.panel-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.panel {
+  background: var(--panel);
+  width: min(900px, 100%);
+  max-height: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transform: scale(0.94) translateY(20px);
+  transition: transform 0.5s cubic-bezier(.2,.8,.2,1);
+}
+.panel-overlay.open .panel {
+  transform: scale(1) translateY(0);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 28px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, #fafbfc, #fff);
+}
+.panel-header .crumbs {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+.panel-header .crumbs .sep { color: var(--line); margin: 0 8px; }
+.panel-header .crumbs .active { color: var(--accent); }
+.panel-close {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  color: var(--ink-soft);
+  transition: all 0.2s;
+}
+.panel-close:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+.panel-body {
+  padding: 32px 36px 40px;
+  overflow-y: auto;
+  flex: 1;
+}
+.panel-body h2 {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 6px;
+}
+.panel-body .subtitle {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin-bottom: 24px;
+}
+.panel-body p { color: var(--ink-soft); line-height: 1.7; margin-bottom: 14px; font-size: 15px; }
+.panel-body a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-soft); }
+.panel-body a:hover { border-bottom-color: var(--accent); }
+
+/* project cards */
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 18px;
+  margin-top: 8px;
+}
+.project-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  background: #fafbfc;
+  transition: all 0.2s;
+}
+.project-card:hover { border-color: var(--accent); background: var(--panel); transform: translateY(-2px); }
+.project-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.project-card .tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 3px 8px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.project-card p { font-size: 13.5px; margin-bottom: 12px; }
+.project-card .links { display: flex; gap: 12px; font-size: 12px; font-family: var(--font-mono); }
+.project-card .links a { letter-spacing: 0.06em; text-transform: uppercase; }
+.project-card video, .project-card iframe {
+  width: 100%;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  aspect-ratio: 16/9;
+}
+
+/* skills */
+.skill-group { margin-bottom: 22px; }
+.skill-group h4 {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 10px;
+}
+.skill-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+
+/* experience timeline */
+.timeline { position: relative; padding-left: 22px; }
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 6px; top: 4px; bottom: 4px;
+  width: 2px; background: var(--line);
+}
+.timeline-item { position: relative; margin-bottom: 24px; }
+.timeline-item::before {
+  content: "";
+  position: absolute;
+  left: -22px; top: 6px;
+  width: 12px; height: 12px;
+  background: var(--accent);
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.timeline-item .when {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  letter-spacing: 0.1em;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+.timeline-item h3 { font-size: 16px; font-weight: 600; }
+.timeline-item .org { color: var(--accent); font-size: 14px; margin-bottom: 6px; }
+
+/* contact buttons */
+.contact-list { display: flex; flex-direction: column; gap: 10px; }
+.contact-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  transition: all 0.2s;
+  text-decoration: none;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.contact-row:hover { border-color: var(--accent); background: var(--accent-soft); transform: translateX(4px); }
+.contact-row .ico { width: 18px; height: 18px; color: var(--accent); }
+.contact-row .lbl { color: var(--ink-faint); width: 90px; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; }
+
+/* button */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--accent);
+  color: white !important;
+  padding: 10px 18px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: none !important;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none !important;
+}
+.btn:hover { background: #1657d4; transform: translateY(-1px); }
+
+/* status toast — appears when arm is working */
+.toast {
+  position: fixed;
+  top: 60px; right: 24px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  padding: 12px 18px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  transform: translateX(20px);
+  transition: all 0.3s;
+  z-index: 20;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateX(0); }
+.toast .working {
+  display: inline-block;
+  width: 8px; height: 8px;
+  background: var(--warn);
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: middle;
+  animation: pulse 0.8s infinite;
+}
+
+/* ============================================================
+   RESPONSIVE  — on small screens, drop the arm and show crates as a grid
+============================================================ */
+@media (max-width: 880px) {
+  .hero { position: relative; padding: 80px 24px 0; max-width: 100%; }
+  .arm-mount, .rail { display: none; }
+  .scene { height: auto; }
+  .stage { position: relative; min-height: 100vh; padding-bottom: 100px; align-items: flex-start; }
+  body { overflow: auto; }
+  .crates {
+    position: relative;
+    bottom: auto;
+    margin-top: 40px;
+    padding: 0 24px;
+  }
+  .crate { width: calc(50% - 10px); height: 110px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     TOP HUD
+============================================================ -->
+<div class="hud top">
+  <div class="group">
+    <span class="brand" id="hud-brand">CYBERNETICS // PORTFOLIO</span>
+    <span>UNIT_005</span>
+  </div>
+  <div class="group">
+    <span><span class="dot"></span> ONLINE · SEEKING</span>
+    <span id="clock">00:00:00</span>
+  </div>
+</div>
+
+<!-- ============================================================
+     BOTTOM HUD
+============================================================ -->
+<div class="hud bottom">
+  <div class="group">
+    <span>SYS://AUTONOMOUS_MODE</span>
+    <span>OPS <span id="op-count">0</span></span>
+  </div>
+  <div class="group">
+    <span id="status-text">AWAITING_INPUT</span>
+  </div>
+</div>
+
+<!-- ============================================================
+     STAGE
+============================================================ -->
+<div class="stage">
+  <div class="scene">
+
+    <!-- Hero text -->
+    <div class="hero">
+      <div class="eyebrow" id="hero-eyebrow">ROBOTICS · AI · MBA</div>
+      <h1 id="hero-name">Hi, I'm <span class="accent">[Your Name]</span></h1>
+      <p id="hero-bio">Engineer at the intersection of artificial intelligence, robotics, and business strategy. B.Tech in AI with robotics electives, MBA in strategy. Now looking for what comes next.</p>
+      <div class="instr">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        SELECT A CRATE BELOW
+      </div>
+    </div>
+
+    <!-- Ceiling rail -->
+    <div class="rail"></div>
+
+    <!-- Robotic arm -->
+    <div class="arm-mount">
+      <div class="base"></div>
+      <div class="arm" id="arm">
+        <div class="shoulder" id="shoulder">
+          <div class="upper-arm">
+            <div class="cable"></div>
+          </div>
+          <div class="elbow" id="elbow">
+            <div class="forearm"></div>
+            <div class="wrist" id="wrist">
+              <div class="gripper-housing"></div>
+              <div class="claw left"></div>
+              <div class="claw right"></div>
+              <div class="held-box"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Crates (rendered by JS from CONFIG) -->
+    <div class="crates" id="crates"></div>
+  </div>
+</div>
+
+<!-- ============================================================
+     PANEL (renders content for selected section)
+============================================================ -->
+<div class="panel-overlay" id="panel-overlay">
+  <div class="panel">
+    <div class="panel-header">
+      <div class="crumbs">
+        <span>WAREHOUSE</span>
+        <span class="sep">/</span>
+        <span>SECTOR_A</span>
+        <span class="sep">/</span>
+        <span class="active" id="panel-crumb">—</span>
+      </div>
+      <button class="panel-close" id="panel-close" aria-label="Close">✕</button>
+    </div>
+    <div class="panel-body" id="panel-body"></div>
+  </div>
+</div>
+
+<!-- Status toast -->
+<div class="toast" id="toast"><span class="working"></span><span id="toast-text">PICKING…</span></div>
+
+<!-- ============================================================
+     CONFIG  — everything you'll edit lives in this single object.
+     Add new sections, projects, skills, etc. by editing here only.
+============================================================ -->
+<script>
+const CONFIG = {
+
+  // ---------- HEADER / HERO ----------   // shown top-left in HUD
+  eyebrow: "B.Tech (AI & Robotics) · MBA (Information Systems)",      // tagline above your name
+  name: "Vireen Chowdary",                  // your name (will appear in accent color)
+  bio: "Business analyst with a background in AI and robotics. I like working where engineering, operations, and leadership meet. I love working and translating between teams, building the decision-support layer, and making sure the right decisions get made for the right reasons.",
+
+  // ---------- SECTIONS ----------
+  // To add a new section (e.g. "Writings"):
+  //   1. Add an object below with a unique `id`.
+  //   2. Pick a `type` from: about | projects | skills | experience | resume | contact | custom
+  //   3. If using `type: "custom"`, put your raw HTML in the `html` field.
+  // The crates will render in this order. Reorder freely.
+  sections: [
+    {
+      id: "about",
+      label: "ABOUT",
+      icon: "user",            // see ICONS at bottom; add new svgs there if needed
+      type: "about",
+      content: {
+        headline: "Profile",
+        paragraphs: [
+          "I'm drawn to problems where the binding constraint isn't the technology, but the organization's ability to make consistent decisions about it. That's how I pick the projects I take on and I look for work where good analysis, structured visibility, or clear translation between teams quietly determines whether something scales or stalls. The robot, the model, the system which are tough to build, but the decisions around them are the also hard part, and that's where I want to do the work.",
+          "I'm drawn to companies turning research into deployed systems — humanoids, autonomous mobile robots, industrial automation, foundation-model robotics. My background is built deliberately around that intersection. I have a B.Tech in Artificial Intelligence with a specialization in Robotics, and I'm completing an MBA in Information Systems and Analytics. The technical degree taught me how engineering teams actually think; the MBA taught me how leadership decisions actually get made. I work at the seam between the two.",
+          "I'm currently looking for full-time roles in robotics strategy, product management, or operations. If you think I might be a fit for your team, let's chat!",
+          "My approach is simple, which is to build the decision-support layer before anyone asks for it: dashboards that make trade-offs visible, structured artifacts from messy operational text, frameworks for the questions leadership keeps coming back to. I'm comfortable in technical rooms and strategy rooms, and I think the business analyst's job is to make sure both rooms are looking at the same picture, I mean that the technical work is always in service of the right decisions, and the leadership is making those decisions with a clear understanding of the trade-offs.",
+          "Outside of work, I play video games, when I want to play intensely, it's Valorant or Counter-Strike 2; when I want to switch off, it's GTA V or Spider-Man. I produce music in FL Studio which is mostly slow lo-fi, the kind of stuff you'd put on at 1 AM. I play a lot of pickleball. And I vibe-code small tools when an idea won't leave me alone like an IPL auction dashboard for college, side projects, things that exist mostly to scratch an itch. They're different muscles, but they all train the same thing: patience with iteration.",       
+        ]
+      }
+    },
+
+    {
+      id: "projects",
+      label: "PROJECTS",
+      icon: "box",
+      type: "projects",
+      content: {
+        headline: "Selected Work",
+        // Each project supports: title, tag, description, links[], and optionally
+        // video (mp4 URL) OR youtube (just the video ID, e.g. "dQw4w9WgXcQ")
+        items: [
+          {
+            title: "Autonomous Warehouse Picker",
+            tag: "ROBOTICS · ROS2",
+            description: "End-to-end pick-and-place system using a 6-DOF arm, RGB-D camera, and grasp-pose prediction. Cut average pick time by 38% over baseline.",
+            // youtube: "dQw4w9WgXcQ",   // ← uncomment to embed YouTube
+            // video: "demos/picker.mp4", // ← or use a local mp4
+            links: [
+              { label: "Github", url: "#" },
+              { label: "Writeup", url: "#" }
+            ]
+          },
+          {
+            title: "Vision-Language Model for Inspection",
+            tag: "AI · COMPUTER VISION",
+            description: "Fine-tuned CLIP variant for industrial defect detection across 14 product lines. Deployed on edge devices with INT8 quantization.",
+            links: [
+              { label: "Paper", url: "#" },
+              { label: "Demo", url: "#" }
+            ]
+          },
+          {
+            title: "Robotics Market Strategy (MBA Capstone)",
+            tag: "MBA · STRATEGY",
+            description: "Go-to-market analysis for a humanoid robotics startup. Segmentation, unit economics, partnership scenarios.",
+            links: [
+              { label: "Slides", url: "#" }
+            ]
+          }
+          // Add as many projects as you want — just copy a block.
+        ]
+      }
+    },
+
+    {
+      id: "experience",
+      label: "EXPERIENCE",
+      icon: "briefcase",
+      type: "experience",
+      content: {
+        headline: "Work History",
+        items: [
+          {
+            when: "2024 – PRESENT",
+            role: "Robotics Engineering Intern",
+            org: "Company Name",
+            bullets: [
+              "Built ROS2 pipeline for autonomous navigation in unstructured environments.",
+              "Owned grasping benchmark; +22% success rate over prior baseline."
+            ]
+          },
+          {
+            when: "2022 – 2024",
+            role: "MBA Candidate",
+            org: "B-School Name",
+            bullets: [
+              "Specialization in technology strategy and operations.",
+              "President, Robotics & Automation Club."
+            ]
+          },
+          {
+            when: "2018 – 2022",
+            role: "B.Tech, Artificial Intelligence",
+            org: "University Name",
+            bullets: [
+              "Electives: Robotics, Computer Vision, Reinforcement Learning, Control Systems.",
+              "Senior thesis on sim-to-real transfer for manipulation."
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      id: "skills",
+      label: "SKILLS",
+      icon: "cpu",
+      type: "skills",
+      content: {
+        headline: "Stack",
+        groups: [
+          { title: "Robotics",        chips: ["ROS / ROS2", "Gazebo", "MoveIt", "URDF", "PCL", "OpenCV", "SLAM"] },
+          { title: "AI / ML",         chips: ["PyTorch", "JAX", "Transformers", "Diffusion", "RL", "Sim2Real"] },
+          { title: "Languages",       chips: ["Python", "C++", "Rust", "TypeScript"] },
+          { title: "Hardware",        chips: ["Jetson", "RealSense", "LiDAR", "Embedded Linux"] },
+          { title: "Business",        chips: ["Strategy", "Operations", "GTM", "Financial Modeling"] }
+        ]
+      }
+    },
+
+    {
+      id: "resume",
+      label: "RESUME",
+      icon: "file",
+      type: "resume",
+      content: {
+        headline: "Resume",
+        paragraphs: [
+          "Download a one-page PDF summary, or get in touch for the full version with references."
+        ],
+        downloadUrl: "resume.pdf",   // place your resume.pdf next to index.html
+        downloadLabel: "Download PDF"
+      }
+    },
+
+    {
+      id: "contact",
+      label: "CONTACT",
+      icon: "mail",
+      type: "contact",
+      content: {
+        headline: "Get in touch",
+        paragraphs: ["Best reached by email. I usually respond within a day."],
+        // Customize freely — add/remove rows. `type` only affects display label.
+        channels: [
+          { type: "EMAIL",    value: "you@example.com",       url: "mailto:you@example.com" },
+          { type: "LINKEDIN", value: "linkedin.com/in/you",   url: "https://linkedin.com/in/you" },
+          { type: "GITHUB",   value: "github.com/you",        url: "https://github.com/you" },
+          { type: "LOCATION", value: "City, Country",          url: "#" }
+        ]
+      }
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // EXAMPLE: how to add a brand-new section like "Writings"
+    // (Just uncomment and customize. The crate appears automatically.)
+    // ──────────────────────────────────────────────────────────
+    /*
+    ,{
+      id: "writings",
+      label: "WRITINGS",
+      icon: "file",
+      type: "custom",
+      content: {
+        headline: "Essays & Notes",
+        // raw HTML — go wild
+        html: `
+          <p>Latest writing:</p>
+          <ul style="margin: 12px 0 20px 20px; color: var(--ink-soft); line-height: 2;">
+            <li><a href="#">Why robots are still expensive — May 2026</a></li>
+            <li><a href="#">Notes on imitation learning at scale</a></li>
+          </ul>
+        `
+      }
+    }
+    */
+  ]
+};
+
+// ============================================================
+// ICONS  — add new ones here, reference them by key in CONFIG
+// ============================================================
+const ICONS = {
+  user:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+  box:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
+  briefcase:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>',
+  cpu:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>',
+  file:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>',
+  mail:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>'
+};
+
+// ============================================================
+// HERO + BRAND wiring
+// ============================================================
+document.getElementById('hud-brand').textContent = CONFIG.brand;
+document.getElementById('hero-eyebrow').textContent = CONFIG.eyebrow;
+document.getElementById('hero-name').innerHTML = `Hi, I'm <span class="accent">${CONFIG.name}</span>`;
+document.getElementById('hero-bio').textContent = CONFIG.bio;
+
+// ============================================================
+// RENDER CRATES from CONFIG
+// ============================================================
+const cratesEl = document.getElementById('crates');
+CONFIG.sections.forEach((s, i) => {
+  const c = document.createElement('div');
+  c.className = 'crate';
+  c.dataset.id = s.id;
+  c.dataset.index = i;
+  c.innerHTML = `
+    <span class="id">PKG-${String(i+1).padStart(3,'0')}</span>
+    <div class="icon">${ICONS[s.icon] || ICONS.box}</div>
+    <span class="label">${s.label}</span>
+  `;
+  c.addEventListener('click', () => pickCrate(c, s));
+  cratesEl.appendChild(c);
+});
+
+// ============================================================
+// ROBOTIC ARM CHOREOGRAPHY
+// We compute target joint angles for each crate so the arm reaches
+// roughly toward its position on the floor. Simple but believable.
+// ============================================================
+const shoulder = document.getElementById('shoulder');
+const elbow    = document.getElementById('elbow');
+const wrist    = document.getElementById('wrist');
+const arm      = document.getElementById('arm');
+const toast    = document.getElementById('toast');
+const statusText = document.getElementById('status-text');
+const opCountEl = document.getElementById('op-count');
+let opCount = 0;
+let busy = false;
+
+// Cursor tracking
+let cursorX = window.innerWidth / 2;
+let cursorY = window.innerHeight / 2;
+
+// Arm segment lengths (in pixels, matching CSS)
+const UPPER_ARM_LENGTH = 170;
+const FOREARM_LENGTH = 150;
+
+function setStatus(t) { statusText.textContent = t; }
+function showToast(t) {
+  document.getElementById('toast-text').textContent = t;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 1800);
+}
+
+// 2D Inverse Kinematics solver for a 2-link arm
+// Simplified approach: directly compute angles based on target position
+function solveIK(tx, ty, upperLen = UPPER_ARM_LENGTH, foreLen = FOREARM_LENGTH) {
+  // Clamped distance to reachable area
+  const dist = Math.hypot(tx, ty);
+  const maxReach = upperLen + foreLen;
+  const minReach = Math.abs(upperLen - foreLen);
+  
+  let targetDist = Math.max(minReach + 10, Math.min(maxReach - 10, dist));
+  
+  // If target is beyond reach, scale it down
+  if (dist > maxReach) {
+    tx = (tx / dist) * targetDist;
+    ty = (ty / dist) * targetDist;
+  } else if (dist < minReach) {
+    tx = (tx / dist) * (minReach + 10);
+    ty = (ty / dist) * (minReach + 10);
+  }
+  
+  // Law of cosines for elbow angle
+  const distSq = tx * tx + ty * ty;
+  const cosElbow = (upperLen * upperLen + foreLen * foreLen - distSq) / (2 * upperLen * foreLen);
+  const clampedCosElbow = Math.max(-1, Math.min(1, cosElbow));
+  const elbowAngleRad = Math.acos(clampedCosElbow);
+  const elbowAngle = (180 - (elbowAngleRad * 180 / Math.PI)) * -1;
+  
+  // Shoulder angle using atan2
+  const targetAngleRad = Math.atan2(ty, tx);
+  const elbowContributionRad = Math.atan2(foreLen * Math.sin(elbowAngleRad), 
+                                           upperLen + foreLen * Math.cos(elbowAngleRad));
+  let shoulderAngle = (targetAngleRad - elbowContributionRad) * (180 / Math.PI);
+  
+  // Clamp shoulder angle to reasonable range
+  shoulderAngle = Math.max(-70, Math.min(70, shoulderAngle));
+  
+  // More flexible elbow range for better joint movement
+  return { shoulderAngle, elbowAngle: Math.max(-45, Math.min(5, elbowAngle)) };
+}
+
+function computeAngles(crateEl) {
+  // This function is now DEPRECATED - we use solveIK() instead for consistency
+  // Keeping it for reference but it's not called anymore
+  const armBase = document.querySelector('.arm-mount').getBoundingClientRect();
+  const crate   = crateEl.getBoundingClientRect();
+  const baseX = armBase.left + armBase.width/2;
+  const baseY = armBase.top  + 20;
+  const tx = crate.left + crate.width/2;
+  const ty = crate.top + 10;
+  const dx = tx - baseX;
+  const dy = ty - baseY;
+
+  return solveIK(dx, dy);
+}
+
+async function pickCrate(crateEl, section) {
+  if (busy) return;
+  busy = true;
+  opCount++;
+  opCountEl.textContent = String(opCount).padStart(3,'0');
+
+  setStatus(`PICK :: ${section.label}`);
+  showToast(`PICKING ${section.label}`);
+
+  // Compute target position for the crate using IK
+  const armBase = document.querySelector('.arm-mount').getBoundingClientRect();
+  const crate   = crateEl.getBoundingClientRect();
+  const baseX = armBase.left + armBase.width/2;
+  const baseY = armBase.top  + 20;
+  const tx_raw = crate.left + crate.width/2;
+  const ty_raw = crate.top + 10;
+  const dx = tx_raw - baseX;
+  const dy = ty_raw - baseY;
+
+  const { shoulderAngle, elbowAngle } = solveIK(dx, dy);
+
+  // 1. Swing arm toward crate
+  shoulder.style.transform = `rotate(${shoulderAngle}deg)`;
+  elbow.style.transform    = `translateX(-50%) rotate(${elbowAngle}deg)`;
+  wrist.style.transform    = `translateX(-50%) rotate(${-shoulderAngle * 0.5}deg)`;
+  await wait(1100);
+
+  // 2. Close gripper
+  arm.classList.add('gripping');
+  await wait(400);
+
+  // 3. Crate "lifts" — hide crate, show held box
+  arm.classList.add('holding');
+  crateEl.classList.add('picked');
+  await wait(300);
+
+  // 4. Retract toward center
+  shoulder.style.transform = `rotate(0deg)`;
+  elbow.style.transform    = `translateX(-50%) rotate(-30deg)`;
+  wrist.style.transform    = `translateX(-50%) rotate(0deg)`;
+  await wait(900);
+
+  // 5. Open the panel
+  setStatus(`OPEN :: ${section.label}`);
+  openPanel(section, () => {
+    // when panel closes, reset arm
+    crateEl.classList.remove('picked');
+    arm.classList.remove('holding');
+    arm.classList.remove('gripping');
+    shoulder.style.transform = `rotate(8deg)`;
+    elbow.style.transform    = `translateX(-50%) rotate(-20deg)`;
+    wrist.style.transform    = `translateX(-50%) rotate(0deg)`;
+    setStatus('AWAITING_INPUT');
+    busy = false;
+  });
+}
+
+function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ============================================================
+// PANEL CONTENT RENDERING
+// ============================================================
+const overlay = document.getElementById('panel-overlay');
+const panelBody = document.getElementById('panel-body');
+const panelCrumb = document.getElementById('panel-crumb');
+const panelClose = document.getElementById('panel-close');
+
+let panelCloseCallback = null;
+
+function openPanel(section, onClose) {
+  panelCrumb.textContent = section.label;
+  panelBody.innerHTML = renderSection(section);
+  overlay.classList.add('open');
+  panelCloseCallback = onClose;
+}
+
+function closePanel() {
+  overlay.classList.remove('open');
+  if (panelCloseCallback) {
+    const cb = panelCloseCallback;
+    panelCloseCallback = null;
+    setTimeout(cb, 350);  // wait for fade-out
+  }
+}
+
+panelClose.addEventListener('click', closePanel);
+overlay.addEventListener('click', (e) => { if (e.target === overlay) closePanel(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && overlay.classList.contains('open')) closePanel(); });
+
+function renderSection(s) {
+  const c = s.content;
+  const head = `<h2>${c.headline}</h2><div class="subtitle">SECTOR_A // ${s.label}</div>`;
+
+  switch (s.type) {
+    case "about":
+      return head + (c.paragraphs || []).map(p => `<p>${p}</p>`).join('');
+
+    case "projects":
+      return head + `<div class="project-grid">` +
+        (c.items || []).map(renderProject).join('') +
+        `</div>`;
+
+    case "experience":
+      return head + `<div class="timeline">` +
+        (c.items || []).map(renderExperience).join('') +
+        `</div>`;
+
+    case "skills":
+      return head + (c.groups || []).map(g => `
+        <div class="skill-group">
+          <h4>${g.title}</h4>
+          <div class="skill-chips">${(g.chips || []).map(x => `<span class="chip">${x}</span>`).join('')}</div>
+        </div>
+      `).join('');
+
+    case "resume":
+      return head +
+        (c.paragraphs || []).map(p => `<p>${p}</p>`).join('') +
+        (c.downloadUrl ? `<a class="btn" href="${c.downloadUrl}" download>${c.downloadLabel || 'Download'} ↓</a>` : '');
+
+    case "contact":
+      return head +
+        (c.paragraphs || []).map(p => `<p>${p}</p>`).join('') +
+        `<div class="contact-list">` +
+        (c.channels || []).map(ch => `
+          <a class="contact-row" href="${ch.url}" ${ch.url.startsWith('http') ? 'target="_blank" rel="noopener"' : ''}>
+            <span class="lbl">${ch.type}</span>
+            <span>${ch.value}</span>
+          </a>
+        `).join('') +
+        `</div>`;
+
+    case "custom":
+      return head + (c.html || '');
+
+    default:
+      return head + `<p>Section type "${s.type}" not recognized.</p>`;
+  }
+}
+
+function renderProject(p) {
+  let media = '';
+  if (p.youtube) {
+    media = `<iframe src="https://www.youtube.com/embed/${p.youtube}" frameborder="0" allowfullscreen></iframe>`;
+  } else if (p.video) {
+    media = `<video src="${p.video}" controls></video>`;
+  }
+  const links = (p.links || []).map(l => `<a href="${l.url}" target="_blank" rel="noopener">${l.label} →</a>`).join('');
+  return `
+    <div class="project-card">
+      ${media}
+      <span class="tag">${p.tag}</span>
+      <h3>${p.title}</h3>
+      <p>${p.description}</p>
+      <div class="links">${links}</div>
+    </div>
+  `;
+}
+
+function renderExperience(e) {
+  const bullets = (e.bullets || []).map(b => `<li>${b}</li>`).join('');
+  return `
+    <div class="timeline-item">
+      <div class="when">${e.when}</div>
+      <h3>${e.role}</h3>
+      <div class="org">${e.org}</div>
+      ${bullets ? `<ul style="color: var(--ink-soft); line-height: 1.7; margin-left: 20px; font-size: 14px;">${bullets}</ul>` : ''}
+    </div>
+  `;
+}
+
+// ============================================================
+// HUD CLOCK + subtle ambient motion + CURSOR TRACKING
+// ============================================================
+function tick() {
+  const d = new Date();
+  const t = [d.getHours(), d.getMinutes(), d.getSeconds()]
+    .map(n => String(n).padStart(2,'0')).join(':');
+  document.getElementById('clock').textContent = t;
+}
+setInterval(tick, 1000); tick();
+
+// Track cursor position
+document.addEventListener('mousemove', (e) => {
+  cursorX = e.clientX;
+  cursorY = e.clientY;
+});
+
+// Update arm to follow cursor when idle (not picking, not busy)
+let lastShoulder = 8;
+let lastElbow = -20;
+
+setInterval(() => {
+  // Don't update arm if we're picking or panel is open
+  if (busy || overlay.classList.contains('open')) return;
+  
+  // Get arm base position
+  const armBase = document.querySelector('.arm-mount').getBoundingClientRect();
+  const baseX = armBase.left + armBase.width/2;
+  const baseY = armBase.top + 20;
+  
+  // Calculate relative cursor position
+  const tx = cursorX - baseX;
+  const ty = cursorY - baseY;
+  
+  // Solve IK for cursor position
+  const { shoulderAngle, elbowAngle } = solveIK(tx, ty);
+  
+  // Smooth interpolation to target angles (avoid jittery motion)
+  lastShoulder += (shoulderAngle - lastShoulder) * 0.1;
+  lastElbow += (elbowAngle - lastElbow) * 0.1;
+  
+  // Apply transforms
+  shoulder.style.transform = `rotate(${lastShoulder}deg)`;
+  elbow.style.transform = `translateX(-50%) rotate(${lastElbow}deg)`;
+  wrist.style.transform = `translateX(-50%) rotate(${-lastShoulder * 0.3}deg)`;
+}, 30);
+</script>
+
+</body>
+</html>
