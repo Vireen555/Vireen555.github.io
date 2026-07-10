@@ -2022,6 +2022,7 @@ function openPanel(section, onClose) {
   panelBody.scrollTop = 0;
   overlay.classList.add('open');
   panelCloseCallback = onClose;
+  history.pushState({ pLevel: 1 }, '');   // history entry for the open section
 }
 
 function closePanel() {
@@ -2033,39 +2034,63 @@ function closePanel() {
   }
 }
 
-panelClose.addEventListener('click', closePanel);
-panelBack.addEventListener('click', closePanel);
-overlay.addEventListener('click', (e) => { if (e.target === overlay) closePanel(); });
-
 // ---- Lightbox ----
 const lightbox = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightbox-img');
 function openLightbox(src) {
   lightboxImg.src = src;
   lightbox.classList.add('open');
+  history.pushState({ pLevel: 3 }, '');   // history entry for the lightbox
 }
 function closeLightbox() {
   lightbox.classList.remove('open');
   lightboxImg.src = '';
 }
-lightbox.addEventListener('click', closeLightbox);
 
-document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  if (lightbox.classList.contains('open')) { closeLightbox(); return; }
-  if (overlay.classList.contains('open')) closePanel();
-});
-
-// ---- Swipe-to-go-back (mobile) ----
-// A deliberate horizontal swipe (either direction) steps back one level:
-// project case study → project chooser → close the section.
-function goBack() {
-  if (lightbox.classList.contains('open')) { closeLightbox(); return; }
-  if (!overlay.classList.contains('open')) return;
-  if (document.querySelector('.panel-inner .back-btn')) backToProjects();
-  else closePanel();
+// =========================================================
+// BACK NAVIGATION — wired into the browser History API
+//
+// Each "open" pushes one history entry (level 1 = section,
+// 2 = project case study, 3 = lightbox). The phone's Back
+// button / back-swipe gesture, the desktop browser's Back
+// button, the Esc key, our own Back button and the panel
+// swipe ALL funnel through popstate, so every one of them
+// steps back exactly ONE level instead of leaving the site:
+//   lightbox → project → project chooser → close section.
+// =========================================================
+function uiLevel() {
+  if (lightbox.classList.contains('open')) return 3;
+  if (document.querySelector('.panel-inner .back-btn')) return 2;
+  if (overlay.classList.contains('open')) return 1;
+  return 0;
 }
+function stepDownOne() {
+  if (lightbox.classList.contains('open')) { closeLightbox(); return; }
+  if (document.querySelector('.panel-inner .back-btn')) { backToProjects(); return; }
+  if (overlay.classList.contains('open')) { closePanel(); return; }
+}
+function reconcileTo(level) {
+  let guard = 0;
+  while (uiLevel() > level && guard++ < 8) stepDownOne();
+}
+// intents called by buttons / gestures
+function navBackOne() { if (uiLevel() > 0) history.back(); }        // step back one level
+function navCloseAll() { const l = uiLevel(); if (l > 0) history.go(-l); }  // ✕ / backdrop: close all
 
+window.addEventListener('popstate', (e) => {
+  const target = (e.state && typeof e.state.pLevel === 'number') ? e.state.pLevel : 0;
+  reconcileTo(target);
+});
+history.replaceState({ pLevel: 0 }, '');   // establish the "home" (nothing open) entry
+
+// wire the on-screen controls to the same navigation
+panelClose.addEventListener('click', navCloseAll);
+panelBack.addEventListener('click', navBackOne);
+overlay.addEventListener('click', (e) => { if (e.target === overlay) navCloseAll(); });
+lightbox.addEventListener('click', navBackOne);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') navBackOne(); });
+
+// ---- Swipe-to-go-back (mobile): a deliberate horizontal swipe = Back ----
 (function enableSwipeBack() {
   const panelEl = overlay.querySelector('.panel');
   if (!panelEl) return;
@@ -2083,7 +2108,7 @@ function goBack() {
     const dx = t.clientX - sx;
     const dy = t.clientY - sy;
     // mostly-horizontal and far enough to be intentional
-    if (Math.abs(dx) > 75 && Math.abs(dx) > Math.abs(dy) * 1.8) goBack();
+    if (Math.abs(dx) > 75 && Math.abs(dx) > Math.abs(dy) * 1.8) navBackOne();
   }, { passive: true });
 })();
 
@@ -2213,8 +2238,9 @@ function openProjectDetail(id) {
   const p = PROJECT_INDEX[id];
   const inner = document.querySelector('.panel-inner');
   if (!p || !inner) return;
-  inner.innerHTML = `<button class="back-btn" onclick="backToProjects()">← All projects</button>` + renderCaseStudy(p);
+  inner.innerHTML = `<button type="button" class="back-btn" onclick="navBackOne()">← All projects</button>` + renderCaseStudy(p);
   panelBody.scrollTop = 0;
+  history.pushState({ pLevel: 2 }, '');   // history entry for the project case study
 }
 
 function backToProjects() {
